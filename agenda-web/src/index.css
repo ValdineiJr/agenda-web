@@ -1,0 +1,165 @@
+html, body, #root {
+  height: 100%;
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- Customização do Calendário (Moderno) --- */
+
+/* Container Principal */
+.react-datepicker-wrapper {
+  width: 100%;
+}
+.react-datepicker {
+  @apply w-full border-none shadow-lg rounded-lg;
+  font-family: inherit;
+}
+
+/* Header (Mês e Ano) */
+.react-datepicker__header {
+  @apply bg-fuchsia-600 rounded-t-lg; /* COR MUDADA */
+  border-bottom: none;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name {
+  @apply text-white font-semibold;
+}
+
+/* Setas de Navegação */
+.react-datepicker__navigation-icon::before {
+  @apply border-white;
+  border-width: 2px 2px 0 0;
+}
+.react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
+  @apply border-gray-200;
+}
+
+/* Container dos dias */
+.react-datepicker__month-container {
+  @apply w-full;
+}
+.react-datepicker__month {
+  @apply m-0 p-4;
+}
+.react-datepicker__week {
+  @apply flex justify-around;
+}
+
+/* Dias */
+.react-datepicker__day {
+  @apply rounded-full w-10 h-10 flex items-center justify-center;
+  transition: all 0.2s ease;
+}
+
+.react-datepicker__day:hover {
+  @apply bg-fuchsia-100; /* COR MUDADA */
+}
+
+/* Dia Selecionado */
+.react-datepicker__day--selected {
+  @apply bg-fuchsia-600 text-white; /* COR MUDADA */
+}
+.react-datepicker__day--selected:hover {
+  @apply bg-fuchsia-700; /* COR MUDADA */
+}
+
+/* Dia Desabilitado (passado ou futuro) */
+.react-datepicker__day--disabled {
+  @apply text-gray-300;
+}
+.react-datepicker__day--disabled:hover {
+  @apply bg-transparent;
+}
+
+/* Dia "Hoje" */
+.react-datepicker__day--today {
+  @apply font-bold border-2 border-fuchsia-600; /* COR MUDADA */
+}
+
+/* --- Customização do Calendário de Admin (Moderno) --- */
+
+/* Header (Toolbar) */
+.rbc-toolbar {
+  @apply flex flex-col md:flex-row justify-between items-center mb-4;
+}
+
+.rbc-toolbar .rbc-toolbar-label {
+  @apply text-2xl font-bold text-gray-800 text-center py-2;
+}
+
+.rbc-btn-group {
+  @apply flex space-x-1 p-1 bg-gray-200 rounded-lg;
+}
+.rbc-toolbar button {
+  @apply px-4 py-2 rounded-md font-semibold text-gray-600 bg-transparent;
+}
+.rbc-toolbar button:hover {
+  @apply bg-gray-300 text-gray-800;
+}
+.rbc-toolbar button.rbc-active {
+  @apply bg-white text-fuchsia-600 shadow-sm; /* COR MUDADA */
+}
+
+/* Header da Grade */
+.rbc-header {
+  @apply text-center p-3 border-b-2 border-gray-200 font-semibold text-gray-600;
+}
+
+/* Eventos (Agendamentos) */
+.rbc-event {
+  @apply bg-fuchsia-500 border-none rounded-md p-2; /* COR MUDADA */
+}
+.rbc-event, .rbc-event-label {
+  @apply text-white text-sm;
+}
+.rbc-event.rbc-selected {
+  @apply bg-fuchsia-700; /* COR MUDADA */
+}
+
+/* Células "Dia de Hoje" */
+.rbc-day-bg.rbc-today {
+  @apply bg-fuchsia-50; /* COR MUDADA */
+}
+
+/* Células "Dia" (Visão Semanal/Dia) */
+.rbc-time-view {
+  @apply border border-gray-200;
+}
+
+.rbc-time-header-content {
+  @apply border-l border-gray-200;
+}
+
+.rbc-time-slot {
+  @apply border-t border-gray-100;
+}
+
+/* --- Estilo do Modal de Agendamento Rápido --- */
+.ModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5); /* Fundo escuro */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.Modal {
+  position: relative;
+  background: white;
+  width: 90%;
+  max-width: 500px;
+  padding: 2rem;
+  border-radius: 0.5rem; /* rounded-lg */
+  outline: none;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  inset: 'auto';
+}
