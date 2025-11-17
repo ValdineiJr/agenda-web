@@ -32,7 +32,6 @@ const MOTIVOS_CLIENTE = [
   "Outro motivo"
 ];
 
-// NOVO: Função para formatar data (copiada)
 function formatarDataHora(iso) {
   const dataObj = new Date(iso);
   return new Intl.DateTimeFormat('pt-BR', {
@@ -42,28 +41,24 @@ function formatarDataHora(iso) {
 }
 
 function ClientManagePage() {
-  // States da Busca
+  // States da Busca (MODIFICADO)
   const [telefoneBusca, setTelefoneBusca] = useState('');
+  const [nascimentoBusca, setNascimentoBusca] = useState(''); // NOVO
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sucesso, setSucesso] = useState(null);
-  
-  // States dos Dados Carregados
-  const [cliente, setCliente] = useState(null); // A "ficha" do cliente
+  const [cliente, setCliente] = useState(null);
   const [agendamentosAtivos, setAgendamentosAtivos] = useState([]);
   const [agendamentosCancelados, setAgendamentosCancelados] = useState([]);
-  
-  // States do Modal de Cancelamento
   const [policyModalIsOpen, setPolicyModalIsOpen] = useState(false);
   const [agendamentoParaCancelar, setAgendamentoParaCancelar] = useState(null);
   const [cancelReason, setCancelReason] = useState(MOTIVOS_CLIENTE[0]);
-  
-  // States do Formulário de Edição de Dados
   const [editNome, setEditNome] = useState('');
   const [editNascimento, setEditNascimento] = useState('');
   const [isSavingData, setIsSavingData] = useState(false);
 
-  // Busca agendamentos E cliente pelo telefone
+  // handleBuscarAgendamento (MODIFICADO)
   const handleBuscarAgendamento = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -73,16 +68,19 @@ function ClientManagePage() {
     setAgendamentosAtivos([]);
     setAgendamentosCancelados([]);
 
+    const telefoneLimpo = telefoneBusca.replace(/[^0-9]/g, '');
+
     try {
-      // 1. Busca a "ficha" do cliente
+      // 1. Busca a "ficha" do cliente (AGORA COM 2 CONDIÇÕES)
       const { data: clienteData, error: clienteError } = await supabase
         .from('clientes')
         .select('*')
-        .eq('telefone', telefoneBusca)
+        .eq('telefone', telefoneLimpo)
+        .eq('data_nascimento', nascimentoBusca) // NOVO: Checagem de segurança
         .single();
       
       if (clienteError || !clienteData) {
-        throw new Error('Telefone não encontrado. Verifique o número digitado.');
+        throw new Error('Dados não encontrados. Verifique o telefone e a data de nascimento.');
       }
       
       setCliente(clienteData);
@@ -97,15 +95,14 @@ function ClientManagePage() {
           servicos ( nome ),
           profissionais ( nome )
         `)
-        .eq('telefone_cliente', telefoneBusca)
-        .gte('data_hora_inicio', new Date().toISOString()) // Apenas futuros
+        .eq('telefone_cliente', telefoneLimpo)
+        .gte('data_hora_inicio', new Date().toISOString()) 
         .order('data_hora_inicio', { ascending: true });
 
       if (agendamentosError) {
         throw agendamentosError;
       }
 
-      // 3. Separa os agendamentos
       setAgendamentosAtivos(agendamentosData.filter(ag => ag.status !== 'cancelado'));
       setAgendamentosCancelados(agendamentosData.filter(ag => ag.status === 'cancelado'));
 
@@ -117,19 +114,11 @@ function ClientManagePage() {
     }
   };
 
-  // Abre o modal de cancelamento
-  const handleAbrirModalCancelamento = (agendamento) => {
-    setAgendamentoParaCancelar(agendamento);
-    setCancelReason(MOTIVOS_CLIENTE[0]);
-    setPolicyModalIsOpen(true);
-  };
-
-  // Confirma o cancelamento (do modal)
+  // handleConfirmarCancelamento (como antes)
   const handleConfirmarCancelamento = async () => {
     if (!agendamentoParaCancelar) return;
     setLoading(true);
     setPolicyModalIsOpen(false); 
-
     const { error: updateError } = await supabase
       .from('agendamentos')
       .update({ 
@@ -137,13 +126,11 @@ function ClientManagePage() {
         cancelamento_motivo: `Cliente: ${cancelReason}`
       })
       .eq('id', agendamentoParaCancelar.id);
-
     if (updateError) {
       console.error('Erro ao cancelar:', updateError);
       setError('Não foi possível cancelar o agendamento.');
     } else {
       setSucesso('Agendamento cancelado com sucesso!');
-      // Atualiza a lista local
       setAgendamentosAtivos(prev => prev.filter(ag => ag.id !== agendamentoParaCancelar.id));
       setAgendamentosCancelados(prev => [agendamentoParaCancelar, ...prev]);
     }
@@ -151,31 +138,28 @@ function ClientManagePage() {
     setLoading(false);
   };
   
-  // NOVO: Salva os dados do cliente
+  // handleSalvarDados (como antes)
   const handleSalvarDados = async (e) => {
     e.preventDefault();
     setIsSavingData(true);
     setError(null);
     setSucesso(null);
-
     const { error } = await supabase
       .from('clientes')
       .update({
         nome: editNome,
         data_nascimento: editNascimento || null
       })
-      .eq('telefone', cliente.telefone); // Atualiza pelo telefone
-
+      .eq('telefone', cliente.telefone);
     if (error) {
       setError('Não foi possível salvar seus dados. Tente novamente.');
     } else {
       setSucesso('Seus dados foram atualizados com sucesso!');
-      // Atualiza o state local do cliente
       setCliente(prev => ({ ...prev, nome: editNome, data_nascimento: editNascimento }));
     }
     setIsSavingData(false);
   };
-
+  
   return (
     <div className="p-4 md:p-8 max-w-lg mx-auto bg-gray-50 shadow-md rounded-lg mt-10">
       
@@ -190,7 +174,6 @@ function ClientManagePage() {
         Consultar Agendamento
       </h1>
 
-      {/* --- MENSAGENS DE FEEDBACK --- */}
       {error && (
         <div className="p-4 mb-4 text-red-800 bg-red-100 border border-red-300 rounded-lg">
           {error}
@@ -202,12 +185,11 @@ function ClientManagePage() {
         </div>
       )}
 
-      {/* --- FORMULÁRIO DE BUSCA --- */}
-      {/* Só mostra a busca se o cliente ainda NÃO buscou */}
+      {/* --- FORMULÁRIO DE BUSCA (MODIFICADO) --- */}
       {!cliente && (
         <form onSubmit={handleBuscarAgendamento} className="space-y-4">
           <p className="text-sm text-gray-600">
-            Digite seu número de telefone (WhatsApp) para ver seus dados e agendamentos futuros.
+            Digite seu telefone e data de nascimento para ver seus dados.
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700">Telefone (WhatsApp)</label>
@@ -220,6 +202,19 @@ function ClientManagePage() {
               required
             />
           </div>
+          
+          {/* NOVO: Campo Data de Nascimento */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Data de Nascimento</label>
+            <input
+              type="date"
+              value={nascimentoBusca}
+              onChange={(e) => setNascimentoBusca(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2"
+              required
+            />
+          </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -230,11 +225,10 @@ function ClientManagePage() {
         </form>
       )}
 
-      {/* --- SEÇÕES DE DADOS (Aparecem após a busca) --- */}
+      {/* --- SEÇÕES DE DADOS (Como antes) --- */}
       {cliente && (
         <div className="space-y-8">
-
-          {/* --- 1. SEÇÃO MEUS DADOS (EDITÁVEL) --- */}
+          {/* ... (Seção Meus Dados) ... */}
           <form onSubmit={handleSalvarDados} className="bg-white p-6 rounded-lg shadow-inner space-y-4">
             <h2 className="text-2xl font-bold text-gray-800">Meus Dados</h2>
             <p className="text-sm text-gray-500">
@@ -267,7 +261,7 @@ function ClientManagePage() {
             </button>
           </form>
 
-          {/* --- 2. SEÇÃO AGENDAMENTOS ATIVOS --- */}
+          {/* ... (Seção Agendamentos Ativos) ... */}
           <div className="bg-white p-6 rounded-lg shadow-inner space-y-4">
             <h2 className="text-2xl font-bold text-gray-800">Meus Agendamentos Ativos</h2>
             {agendamentosAtivos.length === 0 ? (
@@ -288,7 +282,7 @@ function ClientManagePage() {
             )}
           </div>
           
-          {/* --- 3. SEÇÃO AGENDAMENTOS CANCELADOS --- */}
+          {/* ... (Seção Agendamentos Cancelados) ... */}
           <div className="bg-white p-6 rounded-lg shadow-inner space-y-4 opacity-70">
             <h2 className="text-2xl font-bold text-gray-800">Meus Agendamentos Cancelados</h2>
             {agendamentosCancelados.length === 0 ? (
@@ -303,10 +297,8 @@ function ClientManagePage() {
               ))
             )}
           </div>
-
         </div>
       )}
-
 
       {/* --- MODAL DA POLÍTICA (como antes) --- */}
       <Modal

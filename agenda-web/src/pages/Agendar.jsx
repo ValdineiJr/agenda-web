@@ -232,12 +232,26 @@ function AgendarPage() {
     setIsLoadingHorarios(false);
   }
 
-  // handleAgendamento (Como antes)
+ // --- handleAgendamento (MODIFICADO) ---
   async function handleAgendamento() {
-    if (!nome || !telefone) {
+    // 1. NOVO: Limpa o telefone
+    const telefoneLimpo = telefone.replace(/[^0-9]/g, '');
+
+    if (!nome || !telefoneLimpo || !dataNascimento) {
+      alert('Por favor, preencha todos os campos: Nome, Telefone e Data de Nascimento.');
+      return;
+    }
+    
+    if (!nome || !telefoneLimpo) {
       alert('Por favor, preencha seu Nome e Telefone.');
       return;
     }
+    
+    if (telefoneLimpo.length < 10) {
+      alert('Telefone inválido. Por favor, inclua o DDD.');
+      return;
+    }
+    
     setIsSubmitting(true);
     const dataHoraFim = new Date(
       horarioSelecionado.getTime() + servicoSelecionado.duracao_minutos * 60000
@@ -247,7 +261,7 @@ function AgendarPage() {
       profissional_id: profissionalSelecionado.id, 
       nome_cliente: nome,
       email_cliente: null,
-      telefone_cliente: telefone,
+      telefone_cliente: telefoneLimpo,
       data_hora_inicio: horarioSelecionado.toISOString(),
       data_hora_fim: dataHoraFim.toISOString(),
       status: 'confirmado'
@@ -263,7 +277,7 @@ function AgendarPage() {
       setIsSubmitting(false);
     } else {
       const dadosCliente = {
-        telefone: telefone,
+        telefone: telefoneLimpo,
         nome: nome,
         ...(dataNascimento && { data_nascimento: dataNascimento })
       };
