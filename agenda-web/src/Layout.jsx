@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '/src/AuthContext.jsx'; 
 
-// Componente de ícone (como antes)
+// Componente de ícone (Menu)
 function IconeMenu() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -11,13 +11,19 @@ function IconeMenu() {
   );
 }
 
+// NOVO: Componente de ícone (Fechar "X")
+function IconeX() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
 function Layout() {
   const { session, profile, logout } = useAuth();
   const navigate = useNavigate();
-  
-  // O 'useState' que controla o menu (no mobile e desktop)
-  const [menuAberto, setMenuAberto] = useState(false); // NOVO: Padrão é 'fechado' no mobile
-
+  const [menuAberto, setMenuAberto] = useState(false); 
   const whatsappLink = "https://wa.me/5519993562075";
 
   const handleLogout = async () => {
@@ -38,12 +44,21 @@ function Layout() {
         flex flex-col text-white shadow-lg
         bg-fuchsia-900 
         transition-transform duration-300
-        ${menuAberto ? 'translate-x-0' : '-translate-x-full'}  /* Lógica de abrir/fechar no mobile */
+        ${menuAberto ? 'translate-x-0' : '-translate-x-full'}
         
-        md:relative md:translate-x-0 md:flex-shrink-0  /* Como era no desktop */
-        ${menuAberto ? 'md:w-64' : 'md:w-0'} /* Lógica de ocultar no desktop */
+        md:relative md:translate-x-0 md:flex-shrink-0
+        ${menuAberto ? 'md:w-64' : 'md:w-0'}
         `
       }>
+        {/* NOVO: Botão de Fechar (SÓ NO MOBILE) */}
+        <button 
+          onClick={() => setMenuAberto(false)}
+          className="absolute top-4 right-4 p-2 text-fuchsia-200 hover:text-white md:hidden"
+          title="Fechar Menu"
+        >
+          <IconeX />
+        </button>
+
         {/* Wrapper para o conteúdo não quebrar ao fechar */}
         <div className="w-64 overflow-hidden">
           
@@ -99,7 +114,6 @@ function Layout() {
       </aside>
 
       {/* --- NOVO: OVERLAY (FUNDO ESCURO NO MOBILE) --- */}
-      {/* Clicar aqui fecha o menu no mobile */}
       {menuAberto && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
@@ -111,7 +125,6 @@ function Layout() {
       {/* --- CONTEÚDO + FOOTER WRAPPER --- */}
       <div className="flex flex-col flex-1 h-screen">
             
-        {/* --- ÁREA DE CONTEÚDO PRINCIPAL (Com os 2 botões) --- */}
         <main className="flex-1 overflow-y-auto p-4 md:p-10 relative">
           
           {/* --- BOTÃO DE TOGGLE (DESKTOP) --- */}
@@ -123,10 +136,10 @@ function Layout() {
             <IconeMenu />
           </button>
 
-          {/* --- BOTÃO DE TOGGLE (MOBILE) --- */}
+          {/* --- BOTÃO DE TOGGLE (MOBILE) - CORRIGIDO --- */}
           <button 
             onClick={() => setMenuAberto(true)}
-            className="p-2 mb-4 text-gray-700 md:hidden" // Só aparece no mobile
+            className="p-2 mb-4 text-fuchsia-900 md:hidden" // COR MUDADA
             title="Abrir Menu"
           >
             <IconeMenu />
