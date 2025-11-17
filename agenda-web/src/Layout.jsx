@@ -43,12 +43,14 @@ function Layout() {
         `fixed inset-y-0 left-0 z-50 
         flex flex-col text-white shadow-lg
         bg-fuchsia-900 
-        transition-transform duration-300
-        ${menuAberto ? 'translate-x-0' : '-translate-x-full'}  /* Lógica Mobile */
+        transition-all duration-300 overflow-hidden /* Adicionado overflow-hidden */
+        
+        ${menuAberto ? 'translate-x-0' : '-translate-x-full'} /* Lógica Mobile */
         
         md:relative md:translate-x-0 /* Lógica Desktop */
         ${menuAberto ? 'md:w-64' : 'md:w-0'} /* Lógica Desktop Ocultar */
         `
+        // Removida a classe 'md:flex-shrink-0' que causava o bug do espaço em branco
       }>
         
         {/* NOVO: Botão de Fechar (SÓ NO MOBILE) */}
@@ -60,8 +62,8 @@ function Layout() {
           <IconeX />
         </button>
 
-        {/* Wrapper */}
-        <div className="w-64 overflow-hidden">
+        {/* Wrapper (CORRIGIDO) */}
+        <div className="w-64"> {/* Removido 'overflow-hidden' daqui */}
           
           <div className="flex items-center justify-center p-6 border-b border-fuchsia-700">
             <img 
@@ -124,7 +126,7 @@ function Layout() {
 
 
       {/* --- CONTEÚDO + FOOTER WRAPPER --- */}
-      <div className="flex flex-col flex-1 h-screen min-w-0">
+      <div className="flex flex-col flex-1 h-screen min-w-0"> {/* NOVO: Adicionado min-w-0 */}
             
         <main className="flex-1 overflow-y-auto p-4 md:p-10 relative">
           
