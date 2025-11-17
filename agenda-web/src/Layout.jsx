@@ -23,7 +23,7 @@ function IconeX() {
 function Layout() {
   const { session, profile, logout } = useAuth();
   const navigate = useNavigate();
-  const [menuAberto, setMenuAberto] = useState(false); 
+  const [menuAberto, setMenuAberto] = useState(false); // Padrão é 'fechado' no mobile
   const whatsappLink = "https://wa.me/5519993562075";
 
   const handleLogout = async () => {
@@ -38,18 +38,19 @@ function Layout() {
   return (
     <div className="flex h-screen bg-gray-100">
       
-      {/* --- BARRA LATERAL (MODIFICADA PARA MOBILE) --- */}
+      {/* --- BARRA LATERAL (CORRIGIDA) --- */}
       <aside className={
         `fixed inset-y-0 left-0 z-50 
         flex flex-col text-white shadow-lg
         bg-fuchsia-900 
         transition-transform duration-300
-        ${menuAberto ? 'translate-x-0' : '-translate-x-full'}
+        ${menuAberto ? 'translate-x-0' : '-translate-x-full'}  /* Lógica Mobile */
         
-        md:relative md:translate-x-0 md:flex-shrink-0
-        ${menuAberto ? 'md:w-64' : 'md:w-0'}
+        md:relative md:translate-x-0 /* Lógica Desktop */
+        ${menuAberto ? 'md:w-64' : 'md:w-0'} /* Lógica Desktop Ocultar */
         `
       }>
+        
         {/* NOVO: Botão de Fechar (SÓ NO MOBILE) */}
         <button 
           onClick={() => setMenuAberto(false)}
@@ -59,7 +60,7 @@ function Layout() {
           <IconeX />
         </button>
 
-        {/* Wrapper para o conteúdo não quebrar ao fechar */}
+        {/* Wrapper */}
         <div className="w-64 overflow-hidden">
           
           <div className="flex items-center justify-center p-6 border-b border-fuchsia-700">
@@ -113,7 +114,7 @@ function Layout() {
         </div>
       </aside>
 
-      {/* --- NOVO: OVERLAY (FUNDO ESCURO NO MOBILE) --- */}
+      {/* --- OVERLAY (FUNDO ESCURO NO MOBILE) --- */}
       {menuAberto && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
@@ -123,7 +124,7 @@ function Layout() {
 
 
       {/* --- CONTEÚDO + FOOTER WRAPPER --- */}
-      <div className="flex flex-col flex-1 h-screen">
+      <div className="flex flex-col flex-1 h-screen min-w-0">
             
         <main className="flex-1 overflow-y-auto p-4 md:p-10 relative">
           
