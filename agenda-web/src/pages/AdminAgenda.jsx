@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '/src/supabaseClient.js';
 import { useAuth } from '/src/AuthContext.jsx';
+
+// --- Imports (como antes) ---
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import format from 'date-fns/format';
 import parse from 'date-fns/parse';
@@ -14,12 +16,14 @@ import 'react-datepicker/dist/react-datepicker.css';
 registerLocale('pt-BR', ptBR);
 Modal.setAppElement('#root');
 
+// --- Configuração (como antes) ---
 const locales = { 'pt-BR': ptBR };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 const messages = {
   allDay: 'Dia Inteiro', previous: 'Anterior', next: 'Próximo', today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia', agenda: 'Agenda', date: 'Data', time: 'Hora', event: 'Evento', noEventsInRange: 'Não há eventos neste período.', showMore: (total) => `+ Ver mais (${total})`,
 };
 
+// Motivos de Cancelamento (como antes)
 const MOTIVOS_ADMIN = [
   "Cliente solicitou (WhatsApp)",
   "Profissional indisponível",
@@ -27,6 +31,7 @@ const MOTIVOS_ADMIN = [
   "Outro motivo"
 ];
 
+// --- Funções Auxiliares (como antes) ---
 function formatarDataCabecalho(dataString) {
   const [dia, mes, ano] = dataString.split('/');
   const dataObj = new Date(`${ano}-${mes}-${dia}T12:00:00`); 
@@ -37,8 +42,9 @@ function formatarHora(dataISO) {
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(dataObj);
 }
 
+// --- Componente da Página ---
 function AdminAgenda() {
-  // ... (todos os states permanecem iguais) ...
+  // States (como antes)
   const [agendamentosAgrupados, setAgendamentosAgrupados] = useState({});
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [canceladosAgrupados, setCanceladosAgrupados] = useState({});
@@ -72,15 +78,18 @@ function AdminAgenda() {
   const [novoHorarioSelecionado, setNovoHorarioSelecionado] = useState(null);
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [adminCancelReason, setAdminCancelReason] = useState(MOTIVOS_ADMIN[0]);
-  
-  // ... (todas as funções de lógica (fetch, save, delete) permanecem iguais) ...
+
+  // useEffect para buscar dados (como antes)
   useEffect(() => {
     if (!authLoading && profile) {
       fetchAgendamentos(); 
       fetchModalData();
     }
   }, [authLoading, profile]); 
+
+  // fetchAgendamentos (como antes)
   async function fetchAgendamentos() {
+    // ... (Lógica 100% igual a antes) ...
     setLoading(true);
     setError(null);
     const hoje = new Date();
@@ -142,13 +151,19 @@ function AdminAgenda() {
     }
     setLoading(false);
   }
+
+  // fetchModalData (como antes)
   async function fetchModalData() {
+    // ... (Lógica 100% igual a antes) ...
     const { data: servicosData } = await supabase.from('servicos').select('id, nome, duracao_minutos');
     if (servicosData) setAllServicos(servicosData);
     const { data: profData } = await supabase.from('profissionais').select('id, nome');
     if (profData) setAllProfissionais(profData);
   }
+  
+  // handleUpdateStatus (como antes)
   const handleUpdateStatus = async (agendamentoId, novoStatus) => {
+    // ... (Lógica 100% igual a antes) ...
     const { error } = await supabase
       .from('agendamentos')
       .update({ status: novoStatus })
@@ -160,7 +175,10 @@ function AdminAgenda() {
       fetchAgendamentos();
     }
   };
-  const handleSelectSlot = (slotInfo) => {
+
+  // Funções do Modal (handleSelectSlot, handleSelectEvent, closeModal)
+  // ... (Estas permanecem iguais) ...
+    const handleSelectSlot = (slotInfo) => {
     setModalMode('new');
     setSelectedEvent({ start: slotInfo.start, end: slotInfo.end });
     setModalServicoId('');
@@ -200,7 +218,10 @@ function AdminAgenda() {
     setSelectedEvent(null);
     setShowCancelOptions(false);
   };
+
+  // handleModalSave (como antes)
   const handleModalSave = async () => {
+    // ... (Lógica 100% igual a antes) ...
     setIsSavingModal(true);
     setModalError(null);
     if (!modalServicoId || !modalProfissionalId || !modalNome || !modalTelefone) {
@@ -250,20 +271,29 @@ function AdminAgenda() {
       closeModal();
     }
   };
+  
+  // --- handleModalCancel (MODIFICADO) ---
   const handleModalCancel = async () => {
+    // 1. Checa permissão
     if (profile.role !== 'admin' && profile.id !== selectedEvent.profissional_id) {
        setModalError('Você só pode cancelar seus próprios agendamentos.');
        return;
     }
+    
+    // 2. Mostra opções de motivo (se não estiverem visíveis)
     if (!showCancelOptions) {
       setAdminCancelReason(MOTIVOS_ADMIN[0]);
       setShowCancelOptions(true); 
       return;
     }
+
+    // 3. Confirma o cancelamento
     setIsSavingModal(true);
     setModalError(null);
+    
     const motivoPrefix = (profile.role === 'admin') ? 'Admin' : 'Profissional';
     const motivo = `${motivoPrefix}: ${adminCancelReason}`;
+
     const { error } = await supabase
       .from('agendamentos')
       .update({ 
@@ -271,16 +301,35 @@ function AdminAgenda() {
         cancelamento_motivo: motivo
       })
       .eq('id', selectedEvent.id);
+    
     if (error) {
       console.error("Erro ao cancelar:", error);
       setModalError(`Erro: ${error.message}`);
       setIsSavingModal(false);
     } else {
+      // SUCESSO!
       setIsSavingModal(false);
-      closeModal();
+      
+      // NOVO: Prepara e abre o link do WhatsApp
+      const telefoneCliente = selectedEvent.telefone_cliente.replace(/[^0-9]/g, '');
+      const nomeCliente = selectedEvent.nome_cliente;
+      const servicoNome = selectedEvent.servicos.nome;
+      const dataAgendamento = format(new Date(selectedEvent.data_hora_inicio), "dd/MM/yyyy 'às' HH:mm");
+      
+      const mensagemWhatsapp = `Olá, ${nomeCliente}. Informamos que seu agendamento de "${servicoNome}" para o dia ${dataAgendamento} foi cancelado. Motivo: ${adminCancelReason}.`;
+      
+      // Assume DDD 55 (Brasil)
+      const linkWhatsapp = `https://wa.me/55${telefoneCliente}?text=${encodeURIComponent(mensagemWhatsapp)}`;
+      
+      window.open(linkWhatsapp, '_blank'); // Abre em uma nova aba
+      
+      closeModal(); // Fecha o modal
     }
   };
+  
+  // buscarHorariosParaRemarcar (como antes)
   const buscarHorariosParaRemarcar = async (data) => {
+    // ... (Lógica 100% igual a antes) ...
     setLoadingNovosHorarios(true);
     setNovosHorarios([]);
     setNovoHorarioSelecionado(null);
@@ -349,7 +398,7 @@ function AdminAgenda() {
     setLoadingNovosHorarios(false);
   };
 
-  // --- Renderização ---
+  // --- Renderização (Como antes) ---
   if (authLoading || loading) {
     return <div className="max-w-4xl mx-auto"><p>Carregando agenda...</p></div>;
   }
@@ -364,22 +413,22 @@ function AdminAgenda() {
   return (
     <div className="max-w-7xl mx-auto">
       
-      {/* Cabeçalho */}
+      {/* Cabeçalho (como antes) */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-800">
           {profile.role === 'admin' ? 'Agenda (Mês Atual)' : 'Minha Agenda (Mês Atual)'}
         </h1>
         <div className="flex space-x-2 mt-4 md:mt-0 p-1 bg-gray-200 rounded-lg">
-          <button onClick={() => setViewMode('cards')} className={`px-4 py-2 rounded-md font-semibold transition-all ${viewMode === 'cards' ? 'bg-white text-fuchsia-600 shadow-sm' : 'bg-transparent text-gray-600'}`}> {/* COR MUDADA */}
+          <button onClick={() => setViewMode('cards')} className={`px-4 py-2 rounded-md font-semibold transition-all ${viewMode === 'cards' ? 'bg-white text-fuchsia-600 shadow-sm' : 'bg-transparent text-gray-600'}`}>
             Visão em Cards
           </button>
-          <button onClick={() => setViewMode('calendar')} className={`px-4 py-2 rounded-md font-semibold transition-all ${viewMode === 'calendar' ? 'bg-white text-fuchsia-600 shadow-sm' : 'bg-transparent text-gray-600'}`}> {/* COR MUDADA */}
+          <button onClick={() => setViewMode('calendar')} className={`px-4 py-2 rounded-md font-semibold transition-all ${viewMode === 'calendar' ? 'bg-white text-fuchsia-600 shadow-sm' : 'bg-transparent text-gray-600'}`}>
             Visão em Calendário
           </button>
         </div>
       </div>
 
-      {/* --- VISÃO EM CARDS --- */}
+      {/* --- VISÃO EM CARDS (Como antes) --- */}
       {viewMode === 'cards' && (
         <div className="space-y-10">
           {/* --- 1. Cards Ativos --- */}
@@ -391,7 +440,7 @@ function AdminAgenda() {
           ) : (
             diasOrdenadosAtivos.map(dataDia => (
               <div key={dataDia}>
-                <h2 className="text-2xl font-semibold text-fuchsia-600 pb-2 mb-4 border-b-2 border-fuchsia-100"> {/* COR MUDADA */}
+                <h2 className="text-2xl font-semibold text-fuchsia-600 pb-2 mb-4 border-b-2 border-fuchsia-100">
                   {formatarDataCabecalho(dataDia)}
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -433,7 +482,7 @@ function AdminAgenda() {
             ))
           )}
 
-          {/* --- 2. Seção de Agendamentos Finalizados --- */}
+          {/* --- 2. Seção de Agendamentos Finalizados (Como antes) --- */}
           {diasOrdenadosFinalizados.length > 0 && (
             <div className="mt-12">
               <button
@@ -477,7 +526,7 @@ function AdminAgenda() {
             </div>
           )}
 
-          {/* --- 3. Seção de Agendamentos Cancelados --- */}
+          {/* --- 3. Seção de Agendamentos Cancelados (Como antes) --- */}
           {diasOrdenadosCancelados.length > 0 && (
             <div className="mt-12">
               <button
@@ -522,10 +571,11 @@ function AdminAgenda() {
               )}
             </div>
           )}
+
         </div>
       )}
 
-      {/* --- VISÃO EM CALENDÁRIO --- */}
+      {/* --- VISÃO EM CALENDÁRIO (Como antes) --- */}
       {viewMode === 'calendar' && (
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div style={{ height: '70vh' }}> 
@@ -546,7 +596,7 @@ function AdminAgenda() {
               date={calendarDate}
               onNavigate={setCalendarDate}
               eventPropGetter={(event) => {
-                const style = { backgroundColor: '#c026d3', borderColor: '#9d174d' }; // COR MUDADA (Fuchsia)
+                const style = { backgroundColor: '#c026d3', borderColor: '#9d174d' }; 
                 if (event.resource.status === 'em_atendimento') { 
                   style.backgroundColor = '#ECC94B'; style.borderColor = '#D69E2E';
                 }
@@ -557,7 +607,7 @@ function AdminAgenda() {
         </div>
       )}
 
-      {/* --- MODAL --- */}
+      {/* --- MODAL (MODIFICADO) --- */}
       <Modal
         isOpen={modalIsOpen}
         onRequestClose={closeModal}
@@ -572,22 +622,24 @@ function AdminAgenda() {
               {modalMode === 'new' ? 'Novo Agendamento' : 'Editar Agendamento'}
             </h2>
             
+            {/* Oculta o formulário de reagendamento se for cancelar */}
             {!showCancelOptions && (
               <>
                 <p className="text-lg text-gray-600 mb-6">
                   Horário Atual: 
                   <strong> {format(selectedEvent.start || new Date(selectedEvent.data_hora_inicio), 'dd/MM/yyyy \'às\' HH:mm')} </strong>
                 </p>
+                {/* Reagendamento (SÓ ADMIN) */}
                 {modalMode === 'edit' && profile.role === 'admin' && (
                   <div className="mb-6 p-4 bg-gray-100 rounded-lg">
-                    <button type="button" onClick={() => setShowRemarcar(!showRemarcar)} className="font-semibold text-fuchsia-600"> {/* COR MUDADA */}
+                    <button type="button" onClick={() => setShowRemarcar(!showRemarcar)} className="font-semibold text-fuchsia-600">
                       {showRemarcar ? '▼ Fechar Reagendamento' : '► Mudar Dia/Horário'}
                     </button>
                     {showRemarcar && (
                       <div className="mt-4 space-y-4">
                         <p className="text-sm text-gray-600">Atenção: Para buscar horários, o Serviço e o Profissional (nos campos abaixo) devem estar selecionados.</p>
                         <div className="flex gap-4">
-                          <div className="w-1/2">
+                          <div className="w-1H-2">
                             <label className="block text-sm font-medium text-gray-700">Novo Dia</label>
                             <DatePicker
                               selected={novaData}
@@ -620,11 +672,12 @@ function AdminAgenda() {
                     )}
                   </div>
                 )}
+                {/* Detalhes do Agendamento */}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Serviço</label>
                     <select value={modalServicoId} onChange={(e) => setModalServicoId(e.target.value)}
-                      disabled={profile.role !== 'admin'}
+                      disabled={profile.role !== 'admin'} // SÓ ADMIN EDITA
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 bg-white disabled:bg-gray-100" required
                     >
                       <option value="">Selecione um serviço...</option>
@@ -636,7 +689,7 @@ function AdminAgenda() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Profissional</label>
                     <select value={modalProfissionalId} onChange={(e) => setModalProfissionalId(e.target.value)}
-                      disabled={profile.role !== 'admin'}
+                      disabled={profile.role !== 'admin'} // SÓ ADMIN EDITA
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 bg-white disabled:bg-gray-100" required
                     >
                       <option value="">Selecione uma profissional...</option>
@@ -648,7 +701,7 @@ function AdminAgenda() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Nome do Cliente</label>
                     <input type="text" value={modalNome} onChange={(e) => setModalNome(e.target.value)}
-                      disabled={profile.role !== 'admin'}
+                      disabled={profile.role !== 'admin'} // SÓ ADMIN EDITA
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 disabled:bg-gray-100"
                       placeholder="Nome completo" required
                     />
@@ -656,7 +709,7 @@ function AdminAgenda() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Telefone (WhatsApp)</label>
                     <input type="tel" value={modalTelefone} onChange={(e) => setModalTelefone(e.target.value)}
-                      disabled={profile.role !== 'admin'}
+                      disabled={profile.role !== 'admin'} // SÓ ADMIN EDITA
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 disabled:bg-gray-100"
                       placeholder="(11) 99999-9999" required
                     />
@@ -664,7 +717,7 @@ function AdminAgenda() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Email (Opcional)</label>
                     <input type="email" value={modalEmail} onChange={(e) => setEmail(e.target.value)}
-                      disabled={profile.role !== 'admin'}
+                      disabled={profile.role !== 'admin'} // SÓ ADMIN EDITA
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 disabled:bg-gray-100"
                       placeholder="email@cliente.com"
                     />
@@ -673,7 +726,8 @@ function AdminAgenda() {
               </>
             )}
 
-            {/* Formulário de Cancelamento (Admin/Profissional) */}
+            {/* --- Formulário de Cancelamento (MODIFICADO) --- */}
+            {/* Agora aparece para Admin E Profissional */}
             {modalMode === 'edit' && showCancelOptions && (
               <div className="space-y-4">
                 <h3 className="text-xl font-bold text-red-600">Cancelar Agendamento</h3>
@@ -694,45 +748,47 @@ function AdminAgenda() {
               <p className="text-red-600 text-sm mt-4">{modalError}</p>
             )}
 
-            {/* Botões do Modal (Corrigidos) */}
+            {/* --- Botões do Modal (MODIFICADOS) --- */}
             <div className="mt-8 flex space-x-4">
+              
+              {/* 1. Botão "Voltar" ou "Cancelar" (Padrão) */}
               <button
                 type="button"
                 onClick={() => {
-                  if (showCancelOptions) setShowCancelOptions(false); 
-                  else closeModal();
+                  if (showCancelOptions) setShowCancelOptions(false); // Se estiver cancelando, volta para a edição
+                  else closeModal(); // Se estiver editando ou criando, fecha
                 }}
                 className="w-1/2 p-3 rounded-lg text-gray-700 font-semibold bg-gray-200 hover:bg-gray-300"
               >
                 {showCancelOptions ? 'Voltar' : (modalMode === 'new' ? 'Cancelar' : 'Fechar')}
               </button>
 
-              {/* Botão Salvar (Admin) ou Cancelar (Admin/Profissional) */}
+              {/* 2. Botão "Salvar" (Fúcsia) */}
+              {/* Só aparece se for 'novo' OU se for 'admin' e NÃO estiver cancelando */}
               {(modalMode === 'new' || profile.role === 'admin') && !showCancelOptions && (
                 <button
                   type="submit"
                   disabled={isSavingModal}
-                  className="w-1/2 p-3 rounded-lg text-white font-semibold bg-fuchsia-600 hover:bg-fuchsia-700 disabled:bg-gray-400" // COR MUDADA
+                  className="w-1/2 p-3 rounded-lg text-white font-semibold bg-fuchsia-600 hover:bg-fuchsia-700 disabled:bg-gray-400"
                 >
                   {isSavingModal ? 'Salvando...' : (modalMode === 'new' ? 'Salvar Agendamento' : 'Salvar Mudanças')}
                 </button>
               )}
 
+              {/* 3. Botão "Cancelar Agendamento" (Vermelho) */}
+              {/* Aparece se for 'edit' (para Admin E Profissional) */}
               {modalMode === 'edit' && (
                 <button
                   type="button"
-                  onClick={handleModalCancel}
+                  onClick={handleModalCancel} // A função que agora mostra os motivos
                   disabled={isSavingModal}
-                  className={`w-1/2 p-3 rounded-lg text-white font-semibold
-                    ${showCancelOptions ? 'bg-red-600 hover:bg-red-700' : 'bg-red-600 hover:bg-red-700'}
-                    ${isSavingModal ? 'bg-gray-400' : ''}
-                    ${profile.role === 'admin' ? '' : (showCancelOptions ? 'block' : 'block')}
-                  `}
+                  className="w-1/2 p-3 rounded-lg text-white font-semibold bg-red-600 hover:bg-red-700 disabled:bg-gray-400"
                 >
                   {showCancelOptions ? 'Confirmar Cancelamento' : 'Cancelar Agendamento'}
                 </button>
               )}
             </div>
+            
           </form>
         )}
       </Modal>
