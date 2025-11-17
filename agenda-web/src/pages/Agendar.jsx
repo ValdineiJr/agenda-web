@@ -11,7 +11,7 @@ registerLocale('pt-BR', ptBR);
 
 // --- COMPONENTE DE SUCESSO (Como antes) ---
 function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
-  // ... (código 100% igual a antes) ...
+  
   const dataFormatada = new Date(agendamento.data_hora_inicio).toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: 'numeric',
@@ -21,43 +21,88 @@ function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
     hour: '2-digit',
     minute: '2-digit',
   });
-  const numeroWhatsapp = '5519993562075';
+
+  const numeroWhatsapp = '5519993562075'; // <-- TROQUE AQUI
   const mensagemWhatsapp = 
     `Olá! Acabei de confirmar meu agendamento (ID: ${agendamento.id}):
     \n- Serviço: ${servico.nome}
     \n- Dia: ${dataFormatada}
     \n- Horário: ${horaFormatada}
     \n- Cliente: ${agendamento.nome_cliente}`;
+  
   const linkWhatsapp = `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(mensagemWhatsapp)}`;
+
   return (
     <div className="p-4 md:p-8 max-w-lg mx-auto bg-gray-50 shadow-md rounded-lg mt-10 text-center">
-      <h1 className="text-3xl font-bold text-green-600 mb-4"> Agendamento Confirmado! </h1>
+      <h1 className="text-3xl font-bold text-green-600 mb-4">
+        Agendamento Confirmado!
+      </h1>
+      
       <div className="bg-fuchsia-100 border-l-4 border-fuchsia-500 p-4 rounded-md text-left">
         <p className="font-bold text-fuchsia-800">Guarde o ID do seu Agendamento!</p>
         <p className="text-sm text-fuchsia-700">Use este ID e seu telefone para consultar ou cancelar seu agendamento.</p>
-        <p className="text-3xl font-bold text-fuchsia-900 text-center my-2"> {agendamento.id} </p>
+        <p className="text-3xl font-bold text-fuchsia-900 text-center my-2">
+          {agendamento.id}
+        </p>
       </div>
+
       <div className="bg-white p-6 rounded-lg shadow-inner text-left space-y-3 mt-6">
         <p><strong>Serviço:</strong> {servico.nome}</p>
         <p><strong>Cliente:</strong> {agendamento.nome_cliente}</p>
         <p><strong>Data:</strong> {dataFormatada}</p>
         <p><strong>Horário:</strong> {horaFormatada}</p>
       </div>
-      <a href={linkWhatsapp} target="_blank" rel="noopener noreferrer"
+
+      <a
+        href={linkWhatsapp}
+        target="_blank"
+        rel="noopener noreferrer"
         className="mt-8 block w-full p-4 rounded-lg text-white font-bold text-lg bg-green-500 hover:bg-green-600 transition-all"
-      > Confirmar pelo WhatsApp </a>
-      <Link to="/consultar" className="mt-4 block text-sm text-fuchsia-600 hover:underline">
+      >
+        Confirmar pelo WhatsApp
+      </a>
+
+      <Link 
+        to="/consultar"
+        className="mt-4 block text-sm text-fuchsia-600 hover:underline"
+      >
         Consultar ou Cancelar meu Agendamento
       </Link>
-      <button onClick={onNovoAgendamento} className="mt-2 text-sm text-gray-600 hover:underline">
+      
+      <button
+        onClick={onNovoAgendamento}
+        className="mt-2 text-sm text-gray-600 hover:underline"
+      >
         Fazer um novo agendamento
       </button>
+
+      {/* --- SEÇÃO REDES SOCIAIS --- */}
+      <div className="mt-10 pt-6 border-t border-gray-200">
+        <p className="text-sm font-semibold text-gray-700 mb-3">
+          Confira nossas redes sociais para acompanhar as novidades!
+        </p>
+        <a 
+          href="https://instagram.com/seu-usuario-aqui" // <-- TROQUE PELO LINK DO INSTAGRAM
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block p-2 rounded-full bg-gradient-to-br from-purple-600 via-pink-600 to-yellow-500 hover:opacity-80 transition-opacity"
+        >
+          {/* Ícone do Instagram */}
+          <img 
+            src="https://api.iconify.design/mdi:instagram?color=white" 
+            alt="Instagram" 
+            className="w-8 h-8"
+          />
+        </a>
+      </div>
+      {/* --- FIM DA SEÇÃO --- */}
+
     </div>
   );
 }
 
 
-// --- COMPONENTE PRINCIPAL (MODIFICADO) ---
+// --- COMPONENTE PRINCIPAL (COM AS MUDANÇAS) ---
 function AgendarPage() {
   const [servicos, setServicos] = useState([]);
   const [servicoSelecionado, setServicoSelecionado] = useState(null);
@@ -78,10 +123,9 @@ function AgendarPage() {
   const umMesDepois = new Date();
   umMesDepois.setMonth(hoje.getMonth() + 1);
 
-  // 1. Busca os serviços ao carregar (MODIFICADO)
+  // 1. Busca os serviços ao carregar
   useEffect(() => {
     async function getServicos() {
-      // NOVO: Pede a coluna 'dias_disponiveis'
       const { data, error } = await supabase
         .from('servicos')
         .select('id, nome, duracao_minutos, preco, foto_url, dias_disponiveis'); 
@@ -120,14 +164,12 @@ function AgendarPage() {
     }
   }, [dataSelecionada, servicoSelecionado, profissionalSelecionado]); 
 
-  // buscarHorariosDisponiveis (Como antes)
+  // buscarHorariosDisponiveis (CORRIGIDO)
   async function buscarHorariosDisponiveis() {
-    // ... (Lógica 100% igual a antes) ...
     setIsLoadingHorarios(true);
     setHorarioSelecionado(null);
     setHorariosDisponiveis([]);
     const diaDaSemana = dataSelecionada.getDay();
-    // NOVO: Checagem dupla (se o dia já não foi filtrado pelo calendário)
     if (servicoSelecionado.dias_disponiveis && !servicoSelecionado.dias_disponiveis.includes(diaDaSemana)) {
       console.warn('Profissional não trabalha neste dia (filtrado pelo serviço).');
       setIsLoadingHorarios(false);
@@ -158,7 +200,12 @@ function AgendarPage() {
     const [horaInicio, minInicio] = horarioTrabalho.hora_inicio.split(':').map(Number);
     const [horaFim, minFim] = horarioTrabalho.hora_fim.split(':').map(Number);
     let slotAtual = new Date(dataSelecionada).setHours(horaInicio, minInicio, 0, 0);
-    const horarioFechamento = new Date(data).setHours(horaFim, minFim, 0, 0);
+    
+    // --- A CORREÇÃO ESTÁ AQUI ---
+    // Estava 'new Date(data)' e quebrava o app.
+    const horarioFechamento = new Date(dataSelecionada).setHours(horaFim, minFim, 0, 0);
+    // --- FIM DA CORREÇÃO ---
+
     while (slotAtual < horarioFechamento) {
       const slotInicio = new Date(slotAtual);
       const slotFim = new Date(slotAtual + duracaoServico * 60000);
@@ -187,7 +234,6 @@ function AgendarPage() {
 
   // handleAgendamento (Como antes)
   async function handleAgendamento() {
-    // ... (Lógica 100% igual a antes) ...
     if (!nome || !telefone) {
       alert('Por favor, preencha seu Nome e Telefone.');
       return;
@@ -248,18 +294,11 @@ function AgendarPage() {
 
   const formatarHorario = (date) => date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-  // NOVO: A função de filtro para o calendário
+  // filtrarDiaPorServico (Como antes)
   const filtrarDiaPorServico = (data) => {
-    // Se nenhum serviço foi selecionado, permite todos os dias
     if (!servicoSelecionado) return true;
-    
-    // Se o serviço NÃO tiver um array (ex: serviço antigo), permite
     if (!servicoSelecionado.dias_disponiveis) return true;
-    
-    // Pega o dia da semana (0-6)
     const dia = data.getDay();
-    
-    // Retorna true (liberado) se o dia estiver no array
     return servicoSelecionado.dias_disponiveis.includes(dia);
   };
 
@@ -349,7 +388,7 @@ function AgendarPage() {
         </div>
       )}
 
-      {/* --- ETAPA 3: DATA (MODIFICADA) --- */}
+      {/* --- ETAPA 3: DATA (Como antes) --- */}
       {servicoSelecionado && profissionalSelecionado && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-3">3. Selecione a Data:</h2>
@@ -358,10 +397,7 @@ function AgendarPage() {
             onChange={(date) => setDataSelecionada(date)}
             inline locale="pt-BR"
             minDate={hoje} maxDate={umMesDepois} 
-            
-            // NOVO: APLICA O FILTRO
             filterDate={filtrarDiaPorServico}
-            
             wrapperClassName="w-full"
             calendarClassName="w-full"
           />

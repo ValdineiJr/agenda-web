@@ -1,8 +1,8 @@
-import { useState } from 'react'; // NOVO: Importa o useState
+import { useState } from 'react'; 
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '/src/AuthContext.jsx'; 
 
-// NOVO: Um componente de ícone simples para o botão de menu
+// Componente de ícone (como antes)
 function IconeMenu() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -15,8 +15,8 @@ function Layout() {
   const { session, profile, logout } = useAuth();
   const navigate = useNavigate();
   
-  // NOVO: State para controlar se o menu está aberto ou fechado
-  const [menuAberto, setMenuAberto] = useState(true); 
+  // O 'useState' que controla o menu (no mobile e desktop)
+  const [menuAberto, setMenuAberto] = useState(false); // NOVO: Padrão é 'fechado' no mobile
 
   const whatsappLink = "https://wa.me/5519993562075";
 
@@ -32,17 +32,21 @@ function Layout() {
   return (
     <div className="flex h-screen bg-gray-100">
       
-      {/* --- BARRA LATERAL (MODIFICADA) --- */}
+      {/* --- BARRA LATERAL (MODIFICADA PARA MOBILE) --- */}
       <aside className={
-        `hidden md:flex flex-col 
-        bg-fuchsia-900 text-white shadow-lg  /* COR MUDADA */
-        transition-all duration-300 overflow-hidden 
-        ${menuAberto ? 'w-64' : 'w-0'}` // LÓGICA DE OCULTAR
+        `fixed inset-y-0 left-0 z-50 
+        flex flex-col text-white shadow-lg
+        bg-fuchsia-900 
+        transition-transform duration-300
+        ${menuAberto ? 'translate-x-0' : '-translate-x-full'}  /* Lógica de abrir/fechar no mobile */
+        
+        md:relative md:translate-x-0 md:flex-shrink-0  /* Como era no desktop */
+        ${menuAberto ? 'md:w-64' : 'md:w-0'} /* Lógica de ocultar no desktop */
+        `
       }>
         {/* Wrapper para o conteúdo não quebrar ao fechar */}
-        <div className="w-64">
+        <div className="w-64 overflow-hidden">
           
-          {/* NOVO: Header com Logo */}
           <div className="flex items-center justify-center p-6 border-b border-fuchsia-700">
             <img 
               src="https://api.iconify.design/solar:scissors-bold.svg?color=white" 
@@ -52,87 +56,65 @@ function Layout() {
             <span className="text-2xl font-bold whitespace-nowrap">Agenda.Web</span>
           </div>
           
-          {/* --- NAVEGAÇÃO (Cores atualizadas) --- */}
+          {/* Navegação (links 100% iguais a antes) */}
           <nav className="flex-1 p-4 space-y-2">
-            
-            <Link 
-              to="/" 
-              className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-            >
+            <Link to="/" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
               Fazer Agendamento
             </Link>
-
             {session ? (
               <>
-                <Link 
-                  to="/admin" 
-                  className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-                >
+                <Link to="/admin" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
                   Minha Agenda
                 </Link>
-                
                 {profile && profile.role === 'admin' && (
                   <>
-                    <Link 
-                      to="/admin/dashboard" 
-                      className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-                    >
+                    <Link to="/admin/dashboard" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
                       Dashboard (Relatórios)
                     </Link>
-                    <Link 
-                      to="/admin/clientes" 
-                      className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-                    >
+                    <Link to="/admin/clientes" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
                       Gerenciar Clientes
                     </Link>
-                    <Link 
-                      to="/admin/profissionais" 
-                      className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-                    >
+                    <Link to="/admin/profissionais" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
                       Gerenciar Profissionais
                     </Link>
-                    <Link 
-                      to="/admin/servicos" 
-                      className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-                    >
+                    <Link to="/admin/servicos" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
                       Gerenciar Serviços
                     </Link>
-                    <Link 
-                      to="/admin/historico" 
-                      className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-                    >
+                    <Link to="/admin/historico" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
                       Histórico (Arquivados)
                     </Link>
                   </>
                 )}
-
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-3 rounded hover:bg-fuchsia-700"
-                >
+                <button onClick={handleLogout} className="w-full text-left px-4 py-3 rounded hover:bg-fuchsia-700">
                   Logout
                 </button>
               </>
             ) : (
-              <Link 
-                to="/login" 
-                className="block px-4 py-3 rounded hover:bg-fuchsia-700"
-              >
+              <Link to="/login" className="block px-4 py-3 rounded hover:bg-fuchsia-700">
                 Login
               </Link>
             )}
-
           </nav>
         </div>
       </aside>
 
+      {/* --- NOVO: OVERLAY (FUNDO ESCURO NO MOBILE) --- */}
+      {/* Clicar aqui fecha o menu no mobile */}
+      {menuAberto && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMenuAberto(false)}
+        ></div>
+      )}
+
+
       {/* --- CONTEÚDO + FOOTER WRAPPER --- */}
       <div className="flex flex-col flex-1 h-screen">
             
-        {/* --- ÁREA DE CONTEÚDO PRINCIPAL (Com o botão) --- */}
+        {/* --- ÁREA DE CONTEÚDO PRINCIPAL (Com os 2 botões) --- */}
         <main className="flex-1 overflow-y-auto p-4 md:p-10 relative">
           
-          {/* --- NOVO: BOTÃO DE TOGGLE --- */}
+          {/* --- BOTÃO DE TOGGLE (DESKTOP) --- */}
           <button 
             onClick={() => setMenuAberto(!menuAberto)}
             className="hidden md:block p-2 mb-4 bg-gray-200 rounded-full text-gray-700 hover:bg-gray-300 transition-all"
@@ -141,10 +123,19 @@ function Layout() {
             <IconeMenu />
           </button>
 
+          {/* --- BOTÃO DE TOGGLE (MOBILE) --- */}
+          <button 
+            onClick={() => setMenuAberto(true)}
+            className="p-2 mb-4 text-gray-700 md:hidden" // Só aparece no mobile
+            title="Abrir Menu"
+          >
+            <IconeMenu />
+          </button>
+
           <Outlet />
         </main>
 
-        {/* --- FOOTER (MODIFICADO) --- */}
+        {/* --- FOOTER (Como antes) --- */}
         <footer className="p-3 bg-fuchsia-900 text-center text-xs text-gray-400">
           <a 
             href={whatsappLink}
