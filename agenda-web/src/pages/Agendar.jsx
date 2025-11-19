@@ -9,7 +9,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('pt-BR', ptBR); 
 
-// --- COMPONENTE DE SUCESSO (Mantido idêntico) ---
+// --- COMPONENTE DE SUCESSO ---
 function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
   
   const dataFormatada = new Date(agendamento.data_hora_inicio).toLocaleDateString('pt-BR', {
@@ -79,7 +79,7 @@ function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
   );
 }
 
-// --- COMPONENTE DE RESUMO LATERAL (Novo) ---
+// --- COMPONENTE DE RESUMO LATERAL ---
 function ResumoPedido({ servico, profissional, data, horario }) {
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-100 sticky top-6">
@@ -139,7 +139,7 @@ function AgendarPage() {
   
   // --- ESTADOS DE CONTROLE ---
   const [etapa, setEtapa] = useState(1); // 1:Categ/Serv, 2:Prof, 3:Data, 4:Hora, 5:Form
-  const [isLoading, setIsLoading] = useState(false); // Generic loading
+  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingProfissionais, setIsLoadingProfissionais] = useState(false);
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -213,29 +213,38 @@ function AgendarPage() {
     }
   }, [servicoSelecionado]); 
 
-  // --- EFEITO 4: Buscar Horários (Sua lógica complexa original) ---
+  // --- EFEITO 4: Buscar Horários se mudar Data ou Profissional ---
   useEffect(() => {
     if (servicoSelecionado && dataSelecionada && profissionalSelecionado) {
-      buscarHorariosDisponiveis();
+      // Chamamos a busca de horários aqui, mas a chamada principal 
+      // agora é feita no evento de clique da data para garantir performance
+      buscarHorariosDisponiveis(dataSelecionada);
     }
-  }, [dataSelecionada, servicoSelecionado, profissionalSelecionado]); 
+  }, [servicoSelecionado, profissionalSelecionado]); // Removi dataSelecionada daqui para evitar duplo trigger, mas mantive prof/servico
 
-  async function buscarHorariosDisponiveis() {
+  // --- FUNÇÃO BUSCAR HORÁRIOS (CORRIGIDA E ROBUSTA) ---
+  async function buscarHorariosDisponiveis(dataEspecifica = null) {
+    // Usa a data passada explicitamente (do clique) ou a do estado
+    const dataAlvo = dataEspecifica || dataSelecionada;
+    
+    console.log("Buscando horários para:", dataAlvo);
+
     setIsLoadingHorarios(true);
     setHorarioSelecionado(null);
     setHorariosDisponiveis([]);
     
-    const diaDaSemana = dataSelecionada.getDay();
-    // Verifica dias do serviço
+    const diaDaSemana = dataAlvo.getDay();
+    
+    // 1. Verifica se o serviço atende nesse dia
     if (servicoSelecionado.dias_disponiveis && !servicoSelecionado.dias_disponiveis.includes(diaDaSemana)) {
-      // Profissional/Serviço não atende nesse dia
+      console.warn("Serviço fechado neste dia.");
       setIsLoadingHorarios(false);
       return; 
     }
     
     const duracaoServico = servicoSelecionado.duracao_minutos;
     
-    // Busca horário de trabalho do profissional no dia
+    // 2. Busca horário de trabalho do profissional
     const { data: horarioTrabalho, error: errorHorario } = await supabase
       .from('horarios_trabalho')
       .select('hora_inicio, hora_fim')
@@ -244,34 +253,35 @@ function AgendarPage() {
       .single();
       
     if (errorHorario || !horarioTrabalho) {
+      console.warn("Profissional não trabalha neste dia.");
       setIsLoadingHorarios(false);
       return;
     }
     
-    // Busca agendamentos existentes
-    const inicioDoDia = new Date(dataSelecionada).setHours(0, 0, 0, 0);
-    const fimDoDia = new Date(dataSelecionada).setHours(23, 59, 59, 999);
+    // 3. Busca agendamentos existentes
+    const inicioDoDia = new Date(dataAlvo).setHours(0, 0, 0, 0);
+    const fimDoDia = new Date(dataAlvo).setHours(23, 59, 59, 999);
     const { data: agendamentos, error: errorAgendamentos } = await supabase
       .from('agendamentos')
       .select('data_hora_inicio, data_hora_fim')
       .gte('data_hora_inicio', new Date(inicioDoDia).toISOString())
       .lte('data_hora_fim', new Date(fimDoDia).toISOString())
       .eq('profissional_id', profissionalSelecionado.id)
-      .neq('status', 'cancelado'); // Ignora cancelados
+      .neq('status', 'cancelado');
       
     if (errorAgendamentos) {
-      console.error('Erro ao buscar agendamentos:', errorAgendamentos);
+      console.error("Erro ao buscar agendamentos:", errorAgendamentos);
       setIsLoadingHorarios(false);
       return;
     }
-    
-    // Calcula slots
+      
+    // 4. Calcula slots livres
     const slotsDisponiveis = [];
     const [horaInicio, minInicio] = horarioTrabalho.hora_inicio.split(':').map(Number);
     const [horaFim, minFim] = horarioTrabalho.hora_fim.split(':').map(Number);
     
-    let slotAtual = new Date(dataSelecionada).setHours(horaInicio, minInicio, 0, 0);
-    const horarioFechamento = new Date(dataSelecionada).setHours(horaFim, minFim, 0, 0);
+    let slotAtual = new Date(dataAlvo).setHours(horaInicio, minInicio, 0, 0);
+    const horarioFechamento = new Date(dataAlvo).setHours(horaFim, minFim, 0, 0);
 
     while (slotAtual < horarioFechamento) {
       const slotInicio = new Date(slotAtual);
@@ -279,7 +289,7 @@ function AgendarPage() {
       
       if (slotFim.getTime() > horarioFechamento) break;
       
-      // Não mostrar horários passados no dia de hoje
+      // Não mostrar horários passados se for o dia de hoje
       const agora = new Date();
       if (slotInicio.getTime() < agora.getTime()) {
         slotAtual += duracaoServico * 60000;
@@ -287,11 +297,10 @@ function AgendarPage() {
       }
       
       let ocupado = false;
-      for (const ag of agendamentos) {
+      for (const ag of (agendamentos || [])) {
         const agInicio = new Date(ag.data_hora_inicio).getTime();
         const agFim = new Date(ag.data_hora_fim).getTime();
-        
-        // Lógica de colisão
+        // Verifica colisão de horário
         const conflito = (slotInicio.getTime() >= agInicio && slotInicio.getTime() < agFim) || 
                          (slotFim.getTime() > agInicio && slotFim.getTime() <= agFim);
         if (conflito) {
@@ -300,16 +309,32 @@ function AgendarPage() {
         }
       }
       
-      if (!ocupado) slotsDisponiveis.push(slotInicio);
+      if (!ocupado) {
+        slotsDisponiveis.push(slotInicio);
+      }
       
       slotAtual += duracaoServico * 60000;
     }
     
+    console.log("Slots encontrados:", slotsDisponiveis.length);
     setHorariosDisponiveis(slotsDisponiveis);
     setIsLoadingHorarios(false);
   }
 
- // --- handleAgendamento (Salvar no Banco) ---
+  // --- HANDLER DE DATA (A CORREÇÃO PRINCIPAL) ---
+  const handleDateChange = (date) => {
+    setDataSelecionada(date);
+    
+    // IMPORTANTE: Chama a busca imediatamente com a data nova,
+    // sem esperar o estado atualizar, para evitar condições de corrida.
+    buscarHorariosDisponiveis(date);
+    
+    // Avança para a próxima etapa automaticamente
+    setEtapa(4); 
+    window.scrollTo(0, 0);
+  };
+
+  // --- FUNÇÃO DE SALVAR AGENDAMENTO ---
   async function handleAgendamento() {
     const telefoneLimpo = telefone.replace(/[^0-9]/g, '');
 
@@ -348,7 +373,7 @@ function AgendarPage() {
       alert('Ops! Ocorreu um erro ao agendar. Tente novamente.');
       setIsSubmitting(false);
     } else {
-      // Salva cliente
+      // Salva ou atualiza cliente
       const dadosCliente = {
         telefone: telefoneLimpo,
         nome: nome,
@@ -358,9 +383,9 @@ function AgendarPage() {
         .from('clientes')
         .upsert(dadosCliente, { onConflict: 'telefone' });
       
-      if (clienteError) console.warn('Aviso cliente:', clienteError.message);
+      if (clienteError) console.warn('Aviso ao salvar cliente:', clienteError.message);
 
-      // Salva LocalStorage
+      // Salva LocalStorage (se marcado)
       if (lembrarDados) {
         localStorage.setItem('salao_cliente_nome', nome);
         localStorage.setItem('salao_cliente_telefone', telefone); 
@@ -376,7 +401,7 @@ function AgendarPage() {
     }
   }
 
-  // --- NAVEGAÇÃO DO WIZARD ---
+  // --- FUNÇÕES DE NAVEGAÇÃO E HELPERS ---
   const avancarEtapa = () => {
     if (etapa === 1 && !servicoSelecionado) return alert('Selecione um serviço.');
     if (etapa === 2 && !profissionalSelecionado) return alert('Selecione um profissional.');
@@ -388,7 +413,7 @@ function AgendarPage() {
   };
 
   const voltarEtapa = () => {
-    // Se estiver na etapa 1 e já selecionou categoria, o voltar serve para trocar categoria
+    // Se está na lista de serviços e tem categoria selecionada, volta para categorias
     if (etapa === 1 && categoriaSelecionada) {
       setCategoriaSelecionada(null);
       setServicoSelecionado(null);
@@ -518,7 +543,7 @@ function AgendarPage() {
             <div className="flex justify-center">
               <DatePicker
                 selected={dataSelecionada}
-                onChange={(date) => setDataSelecionada(date)}
+                onChange={handleDateChange} 
                 inline locale="pt-BR"
                 minDate={hoje} maxDate={umMesDepois} 
                 filterDate={filtrarDiaPorServico}
@@ -526,6 +551,7 @@ function AgendarPage() {
                 calendarClassName="w-full"
               />
             </div>
+            <p className="text-center text-xs text-gray-400 mt-2">Clique na data para ver os horários.</p>
           </div>
         );
 
@@ -533,8 +559,13 @@ function AgendarPage() {
         return (
           <div className="animate-fade-in">
             <h2 className="text-xl font-semibold mb-4">Selecione o Horário:</h2>
+            <p className="mb-4 text-sm text-gray-600">Dia: <strong>{dataSelecionada.toLocaleDateString('pt-BR')}</strong></p>
+            
             {isLoadingHorarios ? (
-              <p className="text-center text-gray-500">Verificando disponibilidade...</p>
+              <p className="text-center text-gray-500 py-10">
+                <span className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-fuchsia-600 mr-2"></span>
+                Buscando horários disponíveis...
+              </p>
             ) : (
               <>
                 {horariosDisponiveis.length > 0 ? (
@@ -552,7 +583,15 @@ function AgendarPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-gray-500">Nenhum horário disponível para este dia.</p>
+                  <div className="text-center py-10 bg-gray-50 rounded-lg">
+                    <p className="text-gray-500 mb-2">Nenhum horário livre para este dia.</p>
+                    <button 
+                      onClick={voltarEtapa}
+                      className="text-fuchsia-600 underline hover:text-fuchsia-800"
+                    >
+                      Escolher outra data
+                    </button>
+                  </div>
                 )}
               </>
             )}
@@ -571,20 +610,20 @@ function AgendarPage() {
 
             <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Nome Completo</label>
-                <input type="text" value={nome} onChange={e => setNome(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" placeholder="Seu nome" />
+                <label htmlFor="nome" className="block text-sm font-medium text-gray-700">Nome Completo</label>
+                <input type="text" id="nome" value={nome} onChange={e => setNome(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-fuchsia-500 focus:ring-fuchsia-500 sm:text-sm p-2" placeholder="Seu nome" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Telefone (WhatsApp)</label>
-                <input type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" placeholder="(11) 99999-9999" />
+                <label htmlFor="telefone" className="block text-sm font-medium text-gray-700">Telefone (WhatsApp)</label>
+                <input type="tel" id="telefone" value={telefone} onChange={e => setTelefone(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-fuchsia-500 focus:ring-fuchsia-500 sm:text-sm p-2" placeholder="(11) 99999-9999" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Data de Nascimento (Obrigatório)</label>
-                <input type="date" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" />
+                <label htmlFor="nascimento" className="block text-sm font-medium text-gray-700">Data de Nascimento (Obrigatório)</label>
+                <input type="date" id="nascimento" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" />
               </div>
               <div className="flex items-center pt-2">
                 <input id="lembrar" type="checkbox" checked={lembrarDados} onChange={e => setLembrarDados(e.target.checked)} className="h-4 w-4 text-fuchsia-600 border-gray-300 rounded" />
-                <label htmlFor="lembrar" className="ml-2 block text-sm text-gray-900 cursor-pointer">Lembrar meus dados</label>
+                <label htmlFor="lembrar" className="ml-2 block text-sm text-gray-900 cursor-pointer">Lembrar meus dados para a próxima vez</label>
               </div>
             </div>
           </div>
@@ -594,19 +633,36 @@ function AgendarPage() {
   };
 
   if (agendamentoConfirmado) {
-    return <TelaSucesso agendamento={agendamentoConfirmado} servico={servicoSelecionado} onNovoAgendamento={resetarFormulario} />;
+    return (
+      <TelaSucesso 
+        agendamento={agendamentoConfirmado}
+        servico={servicoSelecionado}
+        onNovoAgendamento={resetarFormulario}
+      />
+    );
   }
 
-  // --- LAYOUT PRINCIPAL ---
+  // --- LAYOUT PRINCIPAL (WIZARD) ---
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto mt-4">
-        <Link to="/" className="text-fuchsia-600 hover:underline mb-4 block text-sm">&larr; Voltar para o Início</Link>
-        <h1 className="text-3xl font-bold text-fuchsia-600 mb-2 text-center md:text-left">Agendar Horário</h1>
+        <Link 
+          to="/"
+          className="text-fuchsia-600 hover:underline mb-4 block text-sm"
+        >
+          &larr; Voltar para o Início
+        </Link>
+
+        <h1 className="text-3xl font-bold text-fuchsia-600 mb-2 text-center md:text-left">
+          Agendar Horário
+        </h1>
         
         {/* Barra de Progresso */}
         <div className="w-full bg-gray-200 rounded-full h-2.5 mb-8">
-          <div className="bg-fuchsia-600 h-2.5 rounded-full transition-all duration-500" style={{width: `${(etapa/5)*100}%`}}></div>
+          <div 
+            className="bg-fuchsia-600 h-2.5 rounded-full transition-all duration-500" 
+            style={{ width: `${(etapa / 5) * 100}%` }}
+          ></div>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
@@ -617,16 +673,40 @@ function AgendarPage() {
             
             {/* Botões de Navegação */}
             <div className="flex justify-between mt-8 pt-4 border-t border-gray-100">
+              {/* Botão Voltar */}
               {(etapa > 1 || (etapa === 1 && categoriaSelecionada)) ? (
-                <button onClick={voltarEtapa} className="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors">Voltar</button>
-              ) : <div></div>}
-
-              {etapa < 5 ? (
-                <button onClick={avancarEtapa} className="px-6 py-2 rounded-lg bg-fuchsia-600 text-white font-bold hover:bg-fuchsia-700 transition-colors shadow-md">Próximo &rarr;</button>
-              ) : (
-                <button onClick={handleAgendamento} disabled={isSubmitting} className={`px-8 py-3 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 transition-colors shadow-md ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                  {isSubmitting ? 'Confirmando...' : 'Confirmar Agendamento'}
+                <button 
+                  onClick={voltarEtapa}
+                  className="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Voltar
                 </button>
+              ) : (
+                <div></div> // Espaçador vazio para manter layout
+              )}
+
+              {/* Botão Próximo/Confirmar */}
+              {etapa < 5 && etapa !== 3 ? (
+                // Etapa 3 (Data) não tem botão "Próximo" manual, é automático
+                <button 
+                  onClick={avancarEtapa}
+                  className="px-6 py-2 rounded-lg bg-fuchsia-600 text-white font-bold hover:bg-fuchsia-700 transition-colors shadow-md"
+                >
+                  Próximo &rarr;
+                </button>
+              ) : (
+                etapa === 5 && (
+                  <button
+                    onClick={handleAgendamento}
+                    disabled={isSubmitting}
+                    className={`
+                      px-8 py-3 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 transition-colors shadow-md
+                      ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
+                  >
+                    {isSubmitting ? 'Confirmando...' : 'Confirmar Agendamento'}
+                  </button>
+                )
               )}
             </div>
           </div>
