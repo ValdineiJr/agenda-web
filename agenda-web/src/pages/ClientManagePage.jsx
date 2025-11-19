@@ -16,14 +16,17 @@ function ClientManagePage() {
   // --- ESTADOS DO COMPONENTE ---
   const [telefoneBusca, setTelefoneBusca] = useState('');
   const [nascimentoBusca, setNascimentoBusca] = useState('');
-  const [lembrarDados, setLembrarDados] = useState(false); // Novo estado para o Checkbox
+  const [lembrarDados, setLembrarDados] = useState(false); // Checkbox
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sucesso, setSucesso] = useState(null);
   
   const [cliente, setCliente] = useState(null);
+  
+  // Listas de Agendamentos (Separadas por Status)
   const [agendamentosAtivos, setAgendamentosAtivos] = useState([]);
+  const [agendamentosFinalizados, setAgendamentosFinalizados] = useState([]); // NOVO: Realizados
   const [agendamentosCancelados, setAgendamentosCancelados] = useState([]);
   
   const [editNome, setEditNome] = useState('');
@@ -54,7 +57,9 @@ function ClientManagePage() {
     setError(null);
     setSucesso(null);
     setCliente(null);
+    // Limpa as listas
     setAgendamentosAtivos([]);
+    setAgendamentosFinalizados([]);
     setAgendamentosCancelados([]);
 
     // Remove caracteres não numéricos do telefone para busca
@@ -75,10 +80,9 @@ function ClientManagePage() {
 
       // --- LÓGICA DE SALVAR DADOS (LOCALSTORAGE) ---
       if (lembrarDados) {
-        localStorage.setItem('salao_cliente_telefone', telefoneBusca); // Salva o com formatação se o user digitou assim, ou o limpo, como preferir. Aqui mantive o input.
+        localStorage.setItem('salao_cliente_telefone', telefoneBusca);
         localStorage.setItem('salao_cliente_nascimento', nascimentoBusca);
       } else {
-        // Se desmarcou, limpamos a memória
         localStorage.removeItem('salao_cliente_telefone');
         localStorage.removeItem('salao_cliente_nascimento');
       }
@@ -88,7 +92,9 @@ function ClientManagePage() {
       setEditNome(clienteData.nome || '');
       setEditNascimento(clienteData.data_nascimento || '');
 
-      // 1.2 Busca os agendamentos futuros deste cliente
+      // 1.2 Busca TODOS os agendamentos (Passados e Futuros) deste cliente
+      // IMPORTANTE: Removemos o filtro de data (.gte) para pegar o histórico completo
+      // Ordenamos DESC (decrescente) para facilitar a visualização do histórico
       const { data: agendamentosData, error: agendamentosError } = await supabase
         .from('agendamentos')
         .select(`
@@ -100,16 +106,36 @@ function ClientManagePage() {
           profissionais ( nome )
         `)
         .eq('telefone_cliente', telefoneLimpo)
-        .gte('data_hora_inicio', new Date().toISOString()) 
-        .order('data_hora_inicio', { ascending: true });
+        .order('data_hora_inicio', { ascending: false }); 
 
       if (agendamentosError) {
         throw agendamentosError;
       }
 
-      // Separa ativos de cancelados para exibição
-      setAgendamentosAtivos(agendamentosData.filter(ag => ag.status !== 'cancelado'));
-      setAgendamentosCancelados(agendamentosData.filter(ag => ag.status === 'cancelado'));
+      // 1.3 Separa os agendamentos nas listas corretas
+      const ativos = [];
+      const finalizados = [];
+      const cancelados = [];
+
+      agendamentosData.forEach(ag => {
+        if (ag.status === 'confirmado' || ag.status === 'em_atendimento') {
+          ativos.push(ag);
+        } 
+        else if (ag.status === 'finalizado') {
+          finalizados.push(ag);
+        } 
+        else if (ag.status === 'cancelado') {
+          cancelados.push(ag);
+        }
+      });
+
+      // Reordena os ATIVOS para Ascendente (o mais próximo primeiro)
+      // O banco trouxe decrescente, então invertemos ou ordenamos novamente
+      ativos.sort((a, b) => new Date(a.data_hora_inicio) - new Date(b.data_hora_inicio));
+
+      setAgendamentosAtivos(ativos);
+      setAgendamentosFinalizados(finalizados);
+      setAgendamentosCancelados(cancelados);
 
     } catch (error) {
       console.error('Erro ao buscar:', error);
@@ -124,7 +150,6 @@ function ClientManagePage() {
     setCliente(null);
     setSucesso(null);
     setError(null);
-    // Nota: Não limpamos o localStorage aqui para que os dados voltem preenchidos na próxima vez.
   };
   
   // 2. Salvar Alterações de Dados Pessoais (Nome/Data Nasc)
@@ -146,13 +171,11 @@ function ClientManagePage() {
       setError('Não foi possível salvar seus dados. Tente novamente.');
     } else {
       setSucesso('Seus dados foram atualizados com sucesso!');
-      // Atualiza o objeto cliente localmente para refletir a mudança na tela
       setCliente(prev => ({ ...prev, nome: editNome, data_nascimento: editNascimento }));
       
-      // Se estiver marcado lembrar, atualiza o localStorage também com a nova data se mudou
       if (lembrarDados && editNascimento) {
          localStorage.setItem('salao_cliente_nascimento', editNascimento);
-         setNascimentoBusca(editNascimento); // Sincroniza o input de login
+         setNascimentoBusca(editNascimento);
       }
     }
     setIsSavingData(false);
@@ -181,7 +204,7 @@ function ClientManagePage() {
         Área do Cliente
       </h1>
 
-      {/* Mensagens de Feedback (Erro ou Sucesso) */}
+      {/* Mensagens de Feedback */}
       {error && (
         <div className="p-4 mb-4 text-red-800 bg-red-100 border border-red-300 rounded-lg text-sm">
           {error}
@@ -193,12 +216,12 @@ function ClientManagePage() {
         </div>
       )}
 
-      {/* --- CENÁRIO 1: USUÁRIO NÃO LOGADO (FORMULÁRIO DE BUSCA) --- */}
+      {/* --- CENÁRIO 1: USUÁRIO NÃO LOGADO --- */}
       {!cliente && (
         <form onSubmit={handleBuscarAgendamento} className="space-y-4 bg-white p-6 rounded-lg shadow-sm">
           <h2 className="text-xl font-semibold text-gray-700">Consultar meus horários</h2>
           <p className="text-sm text-gray-500">
-            Identifique-se para acessar seus agendamentos e editar seus dados.
+            Identifique-se para acessar seus agendamentos e histórico.
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700">Telefone (WhatsApp)</label>
@@ -282,7 +305,7 @@ function ClientManagePage() {
             </button>
           </form>
 
-          {/* 2. Lista de Agendamentos Ativos */}
+          {/* 2. Lista de Agendamentos ATIVOS */}
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 space-y-6">
             <h2 className="text-xl font-bold text-gray-800 border-b pb-2">Próximos Agendamentos</h2>
             
@@ -290,10 +313,9 @@ function ClientManagePage() {
               <p className="text-gray-500 italic">Você não tem agendamentos futuros.</p>
             ) : (
               agendamentosAtivos.map(ag => {
-                // --- LÓGICA DOS BOTÕES DO WHATSAPP ---
                 const textoData = formatarDataHora(ag.data_hora_inicio);
                 
-                // Mensagem para Alterar Horário
+                // Mensagem para Alterar
                 const msgAlterar = `Olá! Gostaria de *alterar o horário/data* do meu agendamento de ${ag.servicos?.nome} (ID: ${ag.id}) marcado para ${textoData}.`;
                 const linkAlterar = `https://wa.me/${NUMERO_SALAO}?text=${encodeURIComponent(msgAlterar)}`;
 
@@ -303,8 +325,13 @@ function ClientManagePage() {
 
                 return (
                   <div key={ag.id} className="border border-gray-200 p-4 rounded-lg bg-gray-50">
-                    {/* Detalhes do Agendamento */}
                     <div className="mb-3">
+                      {/* Badge de status (ex: Em Atendimento) */}
+                      {ag.status === 'em_atendimento' && (
+                        <span className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold mb-2">
+                          EM ATENDIMENTO
+                        </span>
+                      )}
                       <h3 className="font-bold text-lg text-gray-800">{ag.servicos?.nome}</h3>
                       <p className="text-gray-600">Profissional: <span className="font-medium">{ag.profissionais?.nome}</span></p>
                       <p className="text-fuchsia-700 font-bold text-lg mt-1 capitalize">
@@ -312,17 +339,13 @@ function ClientManagePage() {
                       </p>
                     </div>
 
-                    {/* Aviso de Política de Cancelamento */}
                     <div className="bg-yellow-50 border-l-4 border-yellow-400 p-2 mb-4">
                       <p className="text-xs text-yellow-800">
                         <strong>Política:</strong> Alterações ou cancelamentos devem ser comunicados com antecedência mínima de 24h.
                       </p>
                     </div>
 
-                    {/* Botões de Ação (Redirecionam para o WhatsApp) */}
                     <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
-                      
-                      {/* Botão Alterar (Azul) */}
                       <a
                         href={linkAlterar}
                         target="_blank"
@@ -332,7 +355,6 @@ function ClientManagePage() {
                         Alterar Data/Horário
                       </a>
 
-                      {/* Botão Cancelar (Vermelho Outline) */}
                       <a
                         href={linkCancelar}
                         target="_blank"
@@ -341,7 +363,6 @@ function ClientManagePage() {
                       >
                         Cancelar Agendamento
                       </a>
-
                     </div>
                   </div>
                 );
@@ -349,9 +370,34 @@ function ClientManagePage() {
             )}
           </div>
           
-          {/* 3. Lista de Histórico de Cancelados (Apenas visualização) */}
+          {/* 3. Histórico de FINALIZADOS (Novo) */}
+          {agendamentosFinalizados.length > 0 && (
+            <div className="bg-green-50 p-6 rounded-lg border border-green-200 space-y-4">
+              <h2 className="text-lg font-bold text-green-800 border-b border-green-200 pb-2">
+                Histórico de Atendimentos Realizados
+              </h2>
+              {agendamentosFinalizados.map(ag => (
+                <div key={ag.id} className="bg-white border border-green-100 p-3 rounded-md shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                  <div>
+                    <p className="font-bold text-gray-700 text-sm sm:text-base">{ag.servicos?.nome}</p>
+                    <p className="text-xs sm:text-sm text-gray-500">Profissional: {ag.profissionais?.nome}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1">{formatarDataHora(ag.data_hora_inicio)}</p>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <span className="inline-block text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                      ✓ Concluído
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 4. Histórico de CANCELADOS */}
           <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4 opacity-80">
-            <h2 className="text-lg font-bold text-gray-600">Histórico de Cancelamentos</h2>
+            <h2 className="text-lg font-bold text-gray-600 border-b border-gray-200 pb-2">
+              Histórico de Cancelamentos
+            </h2>
             {agendamentosCancelados.length === 0 ? (
               <p className="text-sm text-gray-400">Nenhum registro recente.</p>
             ) : (
