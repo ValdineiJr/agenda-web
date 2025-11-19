@@ -8,73 +8,87 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true); 
 
-  // Função auxiliar para buscar o perfil
   const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase
         .from('profissionais')
         .select('*')
         .eq('user_id', userId)
-        .single(); // Usar single() é mais rápido e seguro aqui
-      
+        .single();
       if (error) throw error;
       setProfile(data);
     } catch (error) {
-      console.error('AuthContext: Erro ao buscar perfil:', error);
+      console.error('AuthContext: Erro perfil:', error);
       setProfile(null);
     }
   };
 
-  // Função de Logout
   const doLogout = async () => {
     setLoading(true);
-    await supabase.auth.signOut();
+    // Tenta logout no Supabase, mas não espera eternamente
+    try {
+        await supabase.auth.signOut();
+    } catch (e) {
+        console.error("Erro ao deslogar do supabase", e);
+    }
+    // Limpeza forçada local
+    localStorage.clear(); 
     setSession(null);
     setProfile(null);
     setLoading(false);
-    window.location.href = '/login'; // Força o redirecionamento limpo
+    window.location.href = '/login'; 
   };
 
   useEffect(() => {
     let mounted = true;
 
-    // 1. Função que inicializa tudo
     const initializeAuth = async () => {
       try {
-        // Verifica a sessão atual IMEDIATAMENTE (não espera evento)
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        // --- TRUQUE PARA NÃO TRAVAR ---
+        // Criamos uma promessa que falha após 5 segundos
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Timeout")), 5000)
+        );
+
+        // Corremos: Quem responder primeiro ganha (Supabase ou o Tempo)
+        const { data } = await Promise.race([
+            supabase.auth.getSession(),
+            timeoutPromise
+        ]);
+
+        const currentSession = data?.session;
         
         if (mounted) {
-          setSession(currentSession);
           if (currentSession) {
+            setSession(currentSession);
             await fetchProfile(currentSession.user.id);
           }
         }
       } catch (error) {
-        console.error("Erro na inicialização:", error);
+        console.error("Inicialização demorou ou falhou:", error);
+        // Se der erro ou timeout, consideramos não logado e paramos o loading
+        if (mounted) {
+            setSession(null);
+            setProfile(null);
+        }
       } finally {
-        if (mounted) setLoading(false); // Libera o app de qualquer jeito
+        if (mounted) setLoading(false); // LIBERA A TELA DE QUALQUER JEITO
       }
     };
 
     initializeAuth();
 
-    // 2. Ouve mudanças futuras (Login, Logout, Token Refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        // console.log("Auth Event:", event); // Descomente para debug
         if (mounted) {
           setSession(newSession);
-          
           if (newSession) {
-            // Só busca perfil se mudou o usuário ou se não temos perfil ainda
             if (!profile || profile.user_id !== newSession.user.id) {
                await fetchProfile(newSession.user.id);
             }
           } else {
             setProfile(null);
           }
-          
           setLoading(false);
         }
       }
@@ -85,35 +99,6 @@ export function AuthProvider({ children }) {
       subscription?.unsubscribe();
     };
   }, []);
-
-  // --- Timer de Inatividade (Simplificado e Seguro) ---
-  useEffect(() => {
-    if (!session) return;
-
-    const timerDuration = 30 * 60 * 1000; // 30 minutos
-    let inactivityTimer;
-
-    const resetTimer = () => {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      inactivityTimer = setTimeout(() => {
-        console.log("Sessão expirada por inatividade.");
-        doLogout();
-      }, timerDuration);
-    };
-
-    window.addEventListener('mousemove', resetTimer);
-    window.addEventListener('keydown', resetTimer);
-    window.addEventListener('click', resetTimer);
-    
-    resetTimer(); // Inicia
-
-    return () => {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      window.removeEventListener('mousemove', resetTimer);
-      window.removeEventListener('keydown', resetTimer);
-      window.removeEventListener('click', resetTimer);
-    };
-  }, [session]);
 
   const value = { session, profile, loading, logout: doLogout };
 

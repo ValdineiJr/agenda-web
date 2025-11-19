@@ -3,17 +3,24 @@ import { useAuth } from './AuthContext';
 import { useState, useEffect } from 'react';
 
 function ProtectedRoute() {
-  const { session, loading, logout } = useAuth(); 
+  const { session, loading } = useAuth(); 
   const [demorou, setDemorou] = useState(false);
 
-  // Se o carregamento demorar mais de 3 segundos, mostra botão de ajuda
   useEffect(() => {
     let timer;
     if (loading) {
-      timer = setTimeout(() => setDemorou(true), 3000);
+      timer = setTimeout(() => setDemorou(true), 3000); // 3 segundos
     }
     return () => clearTimeout(timer);
   }, [loading]);
+
+  // Função de Limpeza Forçada
+  const forcarReinico = () => {
+    console.log("Limpando cache local e forçando reload...");
+    localStorage.clear(); // Apaga tokens locais
+    sessionStorage.clear(); // Apaga sessão
+    window.location.href = '/login'; // Redireciona via navegador (hard navigation)
+  };
 
   if (loading) {
     return (
@@ -22,12 +29,15 @@ function ProtectedRoute() {
         <p>Carregando sistema...</p>
         
         {demorou && (
-          <button 
-            onClick={() => { logout(); window.location.reload(); }}
-            className="text-sm text-red-500 underline hover:text-red-700 mt-4"
-          >
-            Está demorando? Clique aqui para reiniciar.
-          </button>
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">Está demorando muito?</p>
+            <button 
+              onClick={forcarReinico}
+              className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors"
+            >
+              Clique aqui para Limpar e Reiniciar
+            </button>
+          </div>
         )}
       </div>
     ); 

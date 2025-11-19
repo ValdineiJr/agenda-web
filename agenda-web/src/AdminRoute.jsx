@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext';
 import { useState, useEffect } from 'react';
 
 function AdminRoute() {
-  const { session, profile, loading, logout } = useAuth();
+  const { session, profile, loading } = useAuth();
   const [demorou, setDemorou] = useState(false);
 
   useEffect(() => {
@@ -14,6 +14,12 @@ function AdminRoute() {
     return () => clearTimeout(timer);
   }, [loading]);
 
+  const forcarReinico = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = '/login';
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col h-screen items-center justify-center bg-gray-50 text-gray-600 gap-4">
@@ -21,12 +27,15 @@ function AdminRoute() {
         <p>Verificando permissões...</p>
         
         {demorou && (
-          <button 
-            onClick={() => { logout(); window.location.reload(); }}
-            className="text-sm text-red-500 underline hover:text-red-700 mt-4"
-          >
-            Travou? Clique aqui para reiniciar a sessão.
-          </button>
+          <div className="text-center">
+             <p className="text-sm text-gray-500 mb-2">Travou?</p>
+             <button 
+               onClick={forcarReinico}
+               className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors"
+             >
+               Clique aqui para Limpar e Reiniciar
+             </button>
+          </div>
         )}
       </div>
     ); 
