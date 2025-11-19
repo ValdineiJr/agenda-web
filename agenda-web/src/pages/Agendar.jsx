@@ -9,7 +9,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('pt-BR', ptBR); 
 
-// --- COMPONENTE DE SUCESSO (Como antes) ---
+// --- COMPONENTE DE SUCESSO ---
 function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
   
   const dataFormatada = new Date(agendamento.data_hora_inicio).toLocaleDateString('pt-BR', {
@@ -22,7 +22,7 @@ function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
     minute: '2-digit',
   });
 
-  const numeroWhatsapp = '5519993562075'; // <-- TROQUE AQUI
+  const numeroWhatsapp = '5519993562075'; 
   const mensagemWhatsapp = 
     `Olá! Acabei de confirmar meu agendamento (ID: ${agendamento.id}):
     \n- Serviço: ${servico.nome}
@@ -82,12 +82,11 @@ function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
           Confira nossas redes sociais para acompanhar as novidades!
         </p>
         <a 
-          href="https://instagram.com/seu-usuario-aqui" // <-- TROQUE PELO LINK DO INSTAGRAM
+          href="https://instagram.com/seu-usuario-aqui" 
           target="_blank"
           rel="noopener noreferrer"
           className="inline-block p-2 rounded-full bg-gradient-to-br from-purple-600 via-pink-600 to-yellow-500 hover:opacity-80 transition-opacity"
         >
-          {/* Ícone do Instagram */}
           <img 
             src="https://api.iconify.design/mdi:instagram?color=white" 
             alt="Instagram" 
@@ -95,14 +94,12 @@ function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
           />
         </a>
       </div>
-      {/* --- FIM DA SEÇÃO --- */}
-
     </div>
   );
 }
 
 
-// --- COMPONENTE PRINCIPAL (COM AS MUDANÇAS) ---
+// --- COMPONENTE PRINCIPAL ---
 function AgendarPage() {
   const [servicos, setServicos] = useState([]);
   const [servicoSelecionado, setServicoSelecionado] = useState(null);
@@ -115,13 +112,30 @@ function AgendarPage() {
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(null);
+  
+  // Estados do Formulário
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [dataNascimento, setDataNascimento] = useState('');
+  const [lembrarDados, setLembrarDados] = useState(false); // Novo estado para o Checkbox
   
   const hoje = new Date();
   const umMesDepois = new Date();
   umMesDepois.setMonth(hoje.getMonth() + 1);
+
+  // --- EFEITO: Carregar dados salvos ao entrar na tela ---
+  useEffect(() => {
+    const nomeSalvo = localStorage.getItem('salao_cliente_nome');
+    const telefoneSalvo = localStorage.getItem('salao_cliente_telefone');
+    const nascimentoSalvo = localStorage.getItem('salao_cliente_nascimento');
+
+    if (nomeSalvo || telefoneSalvo) {
+      if (nomeSalvo) setNome(nomeSalvo);
+      if (telefoneSalvo) setTelefone(telefoneSalvo);
+      if (nascimentoSalvo) setDataNascimento(nascimentoSalvo);
+      setLembrarDados(true); // Já deixa marcado se encontrou dados
+    }
+  }, []);
 
   // 1. Busca os serviços ao carregar
   useEffect(() => {
@@ -136,7 +150,7 @@ function AgendarPage() {
     getServicos();
   }, []);
 
-  // 2. Busca profissionais (Como antes)
+  // 2. Busca profissionais
   useEffect(() => {
     setProfissionais([]);
     setProfissionalSelecionado(null);
@@ -157,14 +171,13 @@ function AgendarPage() {
     }
   }, [servicoSelecionado]); 
 
-  // 3. Busca horários (Como antes)
+  // 3. Busca horários
   useEffect(() => {
     if (servicoSelecionado && dataSelecionada && profissionalSelecionado) {
       buscarHorariosDisponiveis();
     }
   }, [dataSelecionada, servicoSelecionado, profissionalSelecionado]); 
 
-  // buscarHorariosDisponiveis (CORRIGIDO)
   async function buscarHorariosDisponiveis() {
     setIsLoadingHorarios(true);
     setHorarioSelecionado(null);
@@ -201,10 +214,7 @@ function AgendarPage() {
     const [horaFim, minFim] = horarioTrabalho.hora_fim.split(':').map(Number);
     let slotAtual = new Date(dataSelecionada).setHours(horaInicio, minInicio, 0, 0);
     
-    // --- A CORREÇÃO ESTÁ AQUI ---
-    // Estava 'new Date(data)' e quebrava o app.
     const horarioFechamento = new Date(dataSelecionada).setHours(horaFim, minFim, 0, 0);
-    // --- FIM DA CORREÇÃO ---
 
     while (slotAtual < horarioFechamento) {
       const slotInicio = new Date(slotAtual);
@@ -232,18 +242,12 @@ function AgendarPage() {
     setIsLoadingHorarios(false);
   }
 
- // --- handleAgendamento (MODIFICADO) ---
+ // --- handleAgendamento ---
   async function handleAgendamento() {
-    // 1. NOVO: Limpa o telefone
     const telefoneLimpo = telefone.replace(/[^0-9]/g, '');
 
     if (!nome || !telefoneLimpo || !dataNascimento) {
       alert('Por favor, preencha todos os campos: Nome, Telefone e Data de Nascimento.');
-      return;
-    }
-    
-    if (!nome || !telefoneLimpo) {
-      alert('Por favor, preencha seu Nome e Telefone.');
       return;
     }
     
@@ -271,6 +275,7 @@ function AgendarPage() {
       .insert(novoAgendamento)
       .select()
       .single();
+      
     if (agendamentoError) {
       console.error('Erro ao salvar agendamento:', agendamentoError.message);
       alert('Ops! Ocorreu um erro ao agendar. Tente novamente.');
@@ -284,31 +289,41 @@ function AgendarPage() {
       const { error: clienteError } = await supabase
         .from('clientes')
         .upsert(dadosCliente, { onConflict: 'telefone' });
+      
       if (clienteError) {
         console.warn('Aviso: Agendamento salvo, mas falha ao salvar ficha do cliente:', clienteError.message);
       }
+
+      // --- LÓGICA NOVA: SALVAR NO NAVEGADOR (LOCALSTORAGE) ---
+      if (lembrarDados) {
+        localStorage.setItem('salao_cliente_nome', nome);
+        localStorage.setItem('salao_cliente_telefone', telefone); 
+        if (dataNascimento) localStorage.setItem('salao_cliente_nascimento', dataNascimento);
+      } else {
+        localStorage.removeItem('salao_cliente_nome');
+        localStorage.removeItem('salao_cliente_telefone');
+        localStorage.removeItem('salao_cliente_nascimento');
+      }
+      // -----------------------------------------------------
+
       setAgendamentoConfirmado(agendamentoData);
       setIsSubmitting(false);
     }
   }
 
-  // resetarFormulario (Como antes)
   function resetarFormulario() {
     setServicoSelecionado(null);
     setProfissionais([]);
     setProfissionalSelecionado(null);
     setDataSelecionada(new Date());
     setHorarioSelecionado(null);
-    setNome('');
-    setTelefone('');
-    setDataNascimento(''); 
+    // Mantemos os dados pessoais se o user quis lembrar
     setHorariosDisponiveis([]);
     setAgendamentoConfirmado(null);
   }
 
   const formatarHorario = (date) => date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-  // filtrarDiaPorServico (Como antes)
   const filtrarDiaPorServico = (data) => {
     if (!servicoSelecionado) return true;
     if (!servicoSelecionado.dias_disponiveis) return true;
@@ -341,7 +356,7 @@ function AgendarPage() {
         Agendar Horário
       </h1>
       
-      {/* --- ETAPA 1: SERVIÇO (Como antes) --- */}
+      {/* --- ETAPA 1: SERVIÇO --- */}
       <h2 className="text-xl font-semibold mb-3">1. Selecione um Serviço:</h2>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {servicos.map((servico) => (
@@ -371,7 +386,7 @@ function AgendarPage() {
       {servicos.length === 0 && <p className="text-gray-500">Carregando serviços...</p>}
 
 
-      {/* --- ETAPA 2: PROFISSIONAL (Como antes) --- */}
+      {/* --- ETAPA 2: PROFISSIONAL --- */}
       {servicoSelecionado && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-3">2. Selecione o(a) Profissional:</h2>
@@ -402,7 +417,7 @@ function AgendarPage() {
         </div>
       )}
 
-      {/* --- ETAPA 3: DATA (Como antes) --- */}
+      {/* --- ETAPA 3: DATA --- */}
       {servicoSelecionado && profissionalSelecionado && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-3">3. Selecione a Data:</h2>
@@ -418,7 +433,7 @@ function AgendarPage() {
         </div>
       )}
 
-      {/* --- ETAPA 4: HORÁRIO (Como antes) --- */}
+      {/* --- ETAPA 4: HORÁRIO --- */}
       {servicoSelecionado && dataSelecionada && profissionalSelecionado && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-3">4. Selecione o Horário:</h2>
@@ -444,7 +459,7 @@ function AgendarPage() {
         </div>
       )}
 
-      {/* --- ETAPA 5: SEUS DADOS (Como antes) --- */}
+      {/* --- ETAPA 5: SEUS DADOS --- */}
       {horarioSelecionado && (
         <div className="mt-8 border-t pt-6">
           <h2 className="text-xl font-semibold mb-4">5. Preencha seus dados:</h2>
@@ -465,9 +480,9 @@ function AgendarPage() {
             </div>
             <div>
               <label htmlFor="nascimento" className="block text-sm font-medium text-gray-700">
-                Data de Nascimento (Opcional)
+                Data de Nascimento (Obrigatório)
               </label>
-              <span className="text-xs text-gray-500">Usado para promoções de aniversário.</span>
+              <span className="text-xs text-gray-500">Usado para campanhas, promoções de aniversário.</span>
               <input
                 type="date"
                 id="nascimento"
@@ -476,6 +491,21 @@ function AgendarPage() {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2"
               />
             </div>
+
+            {/* --- NOVO: Checkbox Lembrar Dados --- */}
+            <div className="flex items-center pt-2">
+              <input
+                id="lembrar-dados-agendamento"
+                type="checkbox"
+                checked={lembrarDados}
+                onChange={(e) => setLembrarDados(e.target.checked)}
+                className="h-4 w-4 text-fuchsia-600 focus:ring-fuchsia-500 border-gray-300 rounded"
+              />
+              <label htmlFor="lembrar-dados-agendamento" className="ml-2 block text-sm text-gray-900 cursor-pointer">
+                Lembrar meus dados para a próxima vez
+              </label>
+            </div>
+
           </div>
           <div className="mt-8">
             <button

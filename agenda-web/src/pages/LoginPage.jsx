@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '/src/supabaseClient.js'; 
 
@@ -7,7 +7,17 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [lembrarEmail, setLembrarEmail] = useState(false); // Estado para o checkbox
   const navigate = useNavigate();
+
+  // --- EFEITO: Carregar e-mail salvo ao abrir a tela ---
+  useEffect(() => {
+    const emailSalvo = localStorage.getItem('salao_admin_email');
+    if (emailSalvo) {
+      setEmail(emailSalvo);
+      setLembrarEmail(true); // Já deixa marcado se encontrou dados
+    }
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault(); 
@@ -23,6 +33,14 @@ function LoginPage() {
       if (error) {
         throw error;
       }
+
+      // --- LÓGICA: Salvar ou Esquecer o E-mail ---
+      if (lembrarEmail) {
+        localStorage.setItem('salao_admin_email', email);
+      } else {
+        localStorage.removeItem('salao_admin_email');
+      }
+
       if (data.user) {
         navigate('/admin');
       }
@@ -38,7 +56,7 @@ function LoginPage() {
   return (
     <div className="max-w-sm mx-auto bg-white p-8 rounded-lg shadow-md mt-10">
       
-      {/* --- NOVO: LOGO --- */}
+      {/* --- LOGO --- */}
       <div className="flex justify-center mb-6">
         <img 
           src="https://api.iconify.design/solar:scissors-bold.svg?color=fuchsia" 
@@ -83,6 +101,20 @@ function LoginPage() {
             required
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-fuchsia-500 focus:ring-fuchsia-500 sm:text-sm p-2"
           />
+        </div>
+
+        {/* --- CHECKBOX LEMBRAR E-MAIL --- */}
+        <div className="flex items-center">
+          <input
+            id="lembrar-email"
+            type="checkbox"
+            checked={lembrarEmail}
+            onChange={(e) => setLembrarEmail(e.target.checked)}
+            className="h-4 w-4 text-fuchsia-600 focus:ring-fuchsia-500 border-gray-300 rounded"
+          />
+          <label htmlFor="lembrar-email" className="ml-2 block text-sm text-gray-900 cursor-pointer">
+            Lembrar meu e-mail
+          </label>
         </div>
 
         {error && (
