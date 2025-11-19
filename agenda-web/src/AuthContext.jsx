@@ -8,111 +8,115 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true); 
 
-  // --- Função de Logout (para o timer usar) ---
-  const doLogout = () => {
-    console.log("Sessão expirada por inatividade. Deslogando...");
-    supabase.auth.signOut();
-    // A página será redirecionada automaticamente pelo ProtectedRoute
+  // Função auxiliar para buscar o perfil
+  const fetchProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profissionais')
+        .select('*')
+        .eq('user_id', userId)
+        .single(); // Usar single() é mais rápido e seguro aqui
+      
+      if (error) throw error;
+      setProfile(data);
+    } catch (error) {
+      console.error('AuthContext: Erro ao buscar perfil:', error);
+      setProfile(null);
+    }
   };
 
-  // --- Efeito 1: O Listener de Autenticação (Como antes) ---
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        console.log("AuthContext: onAuthStateChange disparou!");
-        setSession(session); 
+  // Função de Logout
+  const doLogout = async () => {
+    setLoading(true);
+    await supabase.auth.signOut();
+    setSession(null);
+    setProfile(null);
+    setLoading(false);
+    window.location.href = '/login'; // Força o redirecionamento limpo
+  };
 
-        try {
-          if (session) {
-            console.log("AuthContext: Buscando perfil com o UUID:", session.user.id);
-            const { data, error } = await supabase
-              .from('profissionais')
-              .select('*')
-              .eq('user_id', session.user.id);
-            
-            if (error) throw error;
-            if (data && data.length > 0) {
-              console.log("AuthContext: Perfil encontrado:", data[0]);
-              setProfile(data[0]);
-            } else {
-              console.log("AuthContext: NENHUM perfil encontrado com esse UUID.");
-              setProfile(null);
+  useEffect(() => {
+    let mounted = true;
+
+    // 1. Função que inicializa tudo
+    const initializeAuth = async () => {
+      try {
+        // Verifica a sessão atual IMEDIATAMENTE (não espera evento)
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        
+        if (mounted) {
+          setSession(currentSession);
+          if (currentSession) {
+            await fetchProfile(currentSession.user.id);
+          }
+        }
+      } catch (error) {
+        console.error("Erro na inicialização:", error);
+      } finally {
+        if (mounted) setLoading(false); // Libera o app de qualquer jeito
+      }
+    };
+
+    initializeAuth();
+
+    // 2. Ouve mudanças futuras (Login, Logout, Token Refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        // console.log("Auth Event:", event); // Descomente para debug
+        if (mounted) {
+          setSession(newSession);
+          
+          if (newSession) {
+            // Só busca perfil se mudou o usuário ou se não temos perfil ainda
+            if (!profile || profile.user_id !== newSession.user.id) {
+               await fetchProfile(newSession.user.id);
             }
           } else {
             setProfile(null);
           }
-        } catch (error) {
-          console.error('AuthContext: A BUSCA FALHOU. Erro:', error);
-          setProfile(null);
-        } finally {
-          console.log("AuthContext: Carregamento finalizado.");
+          
           setLoading(false);
         }
       }
     );
 
     return () => {
+      mounted = false;
       subscription?.unsubscribe();
     };
   }, []);
 
-  // --- NOVO EFEITO 2: O Timer de Inatividade ---
+  // --- Timer de Inatividade (Simplificado e Seguro) ---
   useEffect(() => {
+    if (!session) return;
+
+    const timerDuration = 30 * 60 * 1000; // 30 minutos
     let inactivityTimer;
 
-    // Função que reseta o timer
     const resetTimer = () => {
-      if (inactivityTimer) clearTimeout(inactivityTimer); // Limpa o timer antigo
-      
-      // Cria um novo timer
-      inactivityTimer = setTimeout(() => {
-        // Se o timer estourar (30 min), chama o logout
-        doLogout();
-      }, 1800000); // 30 minutos em milissegundos
-    };
-
-    // Lista de eventos que contam como "atividade"
-    const events = ['mousemove', 'keydown', 'click', 'scroll'];
-    
-    // Funções para adicionar e remover os "ouvintes" de atividade
-    const setupListeners = () => {
-      events.forEach(event => window.addEventListener(event, resetTimer));
-      resetTimer(); // Inicia o timer na primeira vez
-    };
-    
-    const removeListeners = () => {
-      events.forEach(event => window.removeEventListener(event, resetTimer));
       if (inactivityTimer) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        console.log("Sessão expirada por inatividade.");
+        doLogout();
+      }, timerDuration);
     };
 
-    // LÓGICA PRINCIPAL:
-    // Se o usuário está logado (sessão existe)...
-    if (session) {
-      setupListeners(); // Começa a ouvir por atividade
-    } else {
-      removeListeners(); // Se não está logado, para de ouvir
-    }
-
-    // "Limpeza": Remove os ouvintes se o componente for desmontado
-    return () => {
-      removeListeners();
-    };
+    window.addEventListener('mousemove', resetTimer);
+    window.addEventListener('keydown', resetTimer);
+    window.addEventListener('click', resetTimer);
     
-  }, [session]); // Este efeito re-roda sempre que o usuário loga ou desloga
-  // --- FIM DO NOVO EFEITO ---
+    resetTimer(); // Inicia
 
+    return () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      window.removeEventListener('click', resetTimer);
+    };
+  }, [session]);
 
-  // Valor que o "cérebro" fornece para o App
   const value = { session, profile, loading, logout: doLogout };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
-        Carregando...
-      </div>
-    );
-  }
-  
   return (
     <AuthContext.Provider value={value}>
       {children}
