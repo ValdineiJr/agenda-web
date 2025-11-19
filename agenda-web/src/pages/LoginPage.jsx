@@ -61,7 +61,7 @@ function LoginPage() {
         <img 
           src="/logo-salao.png" 
           alt="Logo do Salão" 
-          className="w-24 h-auto object-contain" 
+          className="w-32 h-auto object-contain" 
         />
       </div>
 

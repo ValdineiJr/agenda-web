@@ -67,7 +67,7 @@ function Layout() {
           
           <div className="flex items-center justify-center p-6 border-b border-fuchsia-700">
            <img src="/logo-salao.png" alt="Logo" className="w-10 h-10" />
-            <span className="text-2xl font-bold whitespace-nowrap"><h1>Studio Patricia Ramalho</h1></span>
+            <span className="text-2xl font-bold whitespace-nowrap"><h1>Agenda Salão</h1></span>
           </div>
           
           {/* Navegação (links 100% iguais a antes) */}
