@@ -66,12 +66,8 @@ function Layout() {
         <div className="w-64"> {/* Removido 'overflow-hidden' daqui */}
           
           <div className="flex items-center justify-center p-6 border-b border-fuchsia-700">
-            <img 
-              src="https://api.iconify.design/solar:scissors-bold.svg?color=white" 
-              alt="Logo" 
-              className="w-10 h-10 mr-3 flex-shrink-0" 
-            />
-            <span className="text-2xl font-bold whitespace-nowrap">Agenda.Web</span>
+           <img src="/logo-salao.png" alt="Logo" className="w-10 h-10" />
+            <span className="text-2xl font-bold whitespace-nowrap"><h1>Studio Patricia Ramalho</h1></span>
           </div>
           
           {/* Navegação (links 100% iguais a antes) */}

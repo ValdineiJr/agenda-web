@@ -1,0 +1,33 @@
+=========================================================
+GUIA RAPIDO: COMANDOS PARA ATUALIZAR O SITE (GIT/NETLIFY)
+=========================================================
+
+Siga esta ordem no terminal sempre que fizer alteracoes no codigo:
+
+1. VERIFICAR O QUE MUDOU (Opcional)
+   Serve para ver quais arquivos estao marcados em vermelho.
+   Comando:
+   git status
+
+2. ADICIONAR ARQUIVOS
+   Prepara todas as suas alteracoes para serem salvas.
+   Comando:
+   git add .
+
+3. SALVAR PACOTE (COMMIT)
+   Salva a versao. Lembre-se de mudar a frase entre aspas.
+   Comando:
+   git commit -m "Escreva aqui o que voce alterou"
+
+4. ENVIAR PARA O AR (PUSH)
+   Envia para o GitHub e atualiza o site automaticamente.
+   Comando:
+   git push
+
+---------------------------------------------------------
+ERRO COMUM:
+Se ao rodar o passo 4 aparecer um erro pedindo "upstream",
+rode este comando apenas uma vez:
+
+git push --set-upstream origin main
+=========================================================

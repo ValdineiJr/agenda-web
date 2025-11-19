@@ -6,11 +6,11 @@ function HomePage() {
       
       {/* Logo */}
       <div className="flex justify-center mb-6">
-        <img 
-          src="https://api.iconify.design/solar:scissors-bold.svg?color=fuchsia" 
-          alt="Logo" 
-          className="w-20 h-20 text-fuchsia-900" 
-        />
+      <img 
+  src="/logo-salao.png" 
+  alt="Logo do Salão" 
+  className="w-24 h-auto object-contain" 
+/>
       </div>
       
       <h1 className="text-3xl font-bold text-gray-900 mb-4">

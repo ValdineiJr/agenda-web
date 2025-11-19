@@ -59,9 +59,9 @@ function LoginPage() {
       {/* --- LOGO --- */}
       <div className="flex justify-center mb-6">
         <img 
-          src="https://api.iconify.design/solar:scissors-bold.svg?color=fuchsia" 
-          alt="Logo" 
-          className="w-16 h-16" 
+          src="/logo-salao.png" 
+          alt="Logo do Salão" 
+          className="w-24 h-auto object-contain" 
         />
       </div>
 
