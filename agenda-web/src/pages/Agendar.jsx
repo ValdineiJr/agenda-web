@@ -9,8 +9,8 @@ import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('pt-BR', ptBR); 
 
-// --- COMPONENTE DE SUCESSO ---
-function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
+// --- COMPONENTE DE SUCESSO (Completo com Profissional) ---
+function TelaSucesso({ agendamento, servico, profissional, onNovoAgendamento }) {
   
   const dataFormatada = new Date(agendamento.data_hora_inicio).toLocaleDateString('pt-BR', {
     weekday: 'long',
@@ -23,9 +23,12 @@ function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
   });
 
   const numeroWhatsapp = '5519993562075'; 
+  
+  // Mensagem para o WhatsApp incluindo o Profissional
   const mensagemWhatsapp = 
     `Olá! Acabei de confirmar meu agendamento (ID: ${agendamento.id}):
     \n- Serviço: ${servico.nome}
+    \n- Profissional: ${profissional ? profissional.nome : 'Não informado'}
     \n- Dia: ${dataFormatada}
     \n- Horário: ${horaFormatada}
     \n- Cliente: ${agendamento.nome_cliente}`;
@@ -48,6 +51,7 @@ function TelaSucesso({ agendamento, servico, onNovoAgendamento }) {
 
       <div className="bg-white p-6 rounded-lg shadow-inner text-left space-y-3 mt-6">
         <p><strong>Serviço:</strong> {servico.nome}</p>
+        <p><strong>Profissional:</strong> {profissional ? profissional.nome : '-'}</p>
         <p><strong>Cliente:</strong> {agendamento.nome_cliente}</p>
         <p><strong>Data:</strong> {dataFormatada}</p>
         <p><strong>Horário:</strong> {horaFormatada}</p>
@@ -213,18 +217,11 @@ function AgendarPage() {
     }
   }, [servicoSelecionado]); 
 
-  // --- EFEITO 4: Buscar Horários se mudar Data ou Profissional ---
-  useEffect(() => {
-    if (servicoSelecionado && dataSelecionada && profissionalSelecionado) {
-      // Chamamos a busca de horários aqui, mas a chamada principal 
-      // agora é feita no evento de clique da data para garantir performance
-      buscarHorariosDisponiveis(dataSelecionada);
-    }
-  }, [servicoSelecionado, profissionalSelecionado]); // Removi dataSelecionada daqui para evitar duplo trigger, mas mantive prof/servico
-
-  // --- FUNÇÃO BUSCAR HORÁRIOS (CORRIGIDA E ROBUSTA) ---
+  // --- FUNÇÃO DE BUSCAR HORÁRIOS (Segura e Imediata) ---
+  // Aceita 'dataEspecifica' para ser chamada no clique do calendário
   async function buscarHorariosDisponiveis(dataEspecifica = null) {
-    // Usa a data passada explicitamente (do clique) ou a do estado
+    
+    // Usa a data passada (do clique) ou a do estado
     const dataAlvo = dataEspecifica || dataSelecionada;
     
     console.log("Buscando horários para:", dataAlvo);
@@ -258,7 +255,7 @@ function AgendarPage() {
       return;
     }
     
-    // 3. Busca agendamentos existentes
+    // 3. Busca agendamentos existentes (exceto cancelados)
     const inicioDoDia = new Date(dataAlvo).setHours(0, 0, 0, 0);
     const fimDoDia = new Date(dataAlvo).setHours(23, 59, 59, 999);
     const { data: agendamentos, error: errorAgendamentos } = await supabase
@@ -274,7 +271,7 @@ function AgendarPage() {
       setIsLoadingHorarios(false);
       return;
     }
-      
+    
     // 4. Calcula slots livres
     const slotsDisponiveis = [];
     const [horaInicio, minInicio] = horarioTrabalho.hora_inicio.split(':').map(Number);
@@ -289,24 +286,22 @@ function AgendarPage() {
       
       if (slotFim.getTime() > horarioFechamento) break;
       
-      // Não mostrar horários passados se for o dia de hoje
+      // Não mostrar horários passados se for hoje
       const agora = new Date();
       if (slotInicio.getTime() < agora.getTime()) {
         slotAtual += duracaoServico * 60000;
         continue;
       }
       
+      // Verifica colisões
       let ocupado = false;
       for (const ag of (agendamentos || [])) {
         const agInicio = new Date(ag.data_hora_inicio).getTime();
         const agFim = new Date(ag.data_hora_fim).getTime();
-        // Verifica colisão de horário
+        
         const conflito = (slotInicio.getTime() >= agInicio && slotInicio.getTime() < agFim) || 
                          (slotFim.getTime() > agInicio && slotFim.getTime() <= agFim);
-        if (conflito) {
-          ocupado = true;
-          break;
-        }
+        if (conflito) { ocupado = true; break; }
       }
       
       if (!ocupado) {
@@ -321,20 +316,16 @@ function AgendarPage() {
     setIsLoadingHorarios(false);
   }
 
-  // --- HANDLER DE DATA (A CORREÇÃO PRINCIPAL) ---
+  // --- HANDLER DE DATA (CORRIGIDO) ---
   const handleDateChange = (date) => {
     setDataSelecionada(date);
-    
-    // IMPORTANTE: Chama a busca imediatamente com a data nova,
-    // sem esperar o estado atualizar, para evitar condições de corrida.
-    buscarHorariosDisponiveis(date);
-    
-    // Avança para a próxima etapa automaticamente
-    setEtapa(4); 
+    // CORREÇÃO CRUCIAL: Busca imediata com a nova data
+    buscarHorariosDisponiveis(date); 
+    setEtapa(4); // Avança tela
     window.scrollTo(0, 0);
   };
 
-  // --- FUNÇÃO DE SALVAR AGENDAMENTO ---
+  // --- SALVAR AGENDAMENTO ---
   async function handleAgendamento() {
     const telefoneLimpo = telefone.replace(/[^0-9]/g, '');
 
@@ -373,7 +364,7 @@ function AgendarPage() {
       alert('Ops! Ocorreu um erro ao agendar. Tente novamente.');
       setIsSubmitting(false);
     } else {
-      // Salva ou atualiza cliente
+      // Salva cliente
       const dadosCliente = {
         telefone: telefoneLimpo,
         nome: nome,
@@ -383,9 +374,9 @@ function AgendarPage() {
         .from('clientes')
         .upsert(dadosCliente, { onConflict: 'telefone' });
       
-      if (clienteError) console.warn('Aviso ao salvar cliente:', clienteError.message);
+      if (clienteError) console.warn('Aviso cliente:', clienteError.message);
 
-      // Salva LocalStorage (se marcado)
+      // Salva LocalStorage
       if (lembrarDados) {
         localStorage.setItem('salao_cliente_nome', nome);
         localStorage.setItem('salao_cliente_telefone', telefone); 
@@ -401,7 +392,7 @@ function AgendarPage() {
     }
   }
 
-  // --- FUNÇÕES DE NAVEGAÇÃO E HELPERS ---
+  // --- NAVEGAÇÃO DO WIZARD ---
   const avancarEtapa = () => {
     if (etapa === 1 && !servicoSelecionado) return alert('Selecione um serviço.');
     if (etapa === 2 && !profissionalSelecionado) return alert('Selecione um profissional.');
@@ -413,7 +404,6 @@ function AgendarPage() {
   };
 
   const voltarEtapa = () => {
-    // Se está na lista de serviços e tem categoria selecionada, volta para categorias
     if (etapa === 1 && categoriaSelecionada) {
       setCategoriaSelecionada(null);
       setServicoSelecionado(null);
@@ -443,7 +433,7 @@ function AgendarPage() {
     return servicoSelecionado.dias_disponiveis.includes(dia);
   };
 
-  // --- RENDERIZAÇÃO DAS ETAPAS (Conteúdo Central) ---
+  // --- RENDERIZAÇÃO DAS ETAPAS ---
   const renderEtapa = () => {
     switch(etapa) {
       case 1: // CATEGORIA & SERVIÇO
@@ -635,9 +625,11 @@ function AgendarPage() {
   if (agendamentoConfirmado) {
     return (
       <TelaSucesso 
-        agendamento={agendamentoConfirmado}
-        servico={servicoSelecionado}
-        onNovoAgendamento={resetarFormulario}
+        agendamento={agendamentoConfirmado} 
+        servico={servicoSelecionado} 
+        // PASSANDO O PROFISSIONAL AQUI:
+        profissional={profissionalSelecionado}
+        onNovoAgendamento={resetarFormulario} 
       />
     );
   }
