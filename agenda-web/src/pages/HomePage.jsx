@@ -75,7 +75,11 @@ function HomePage() {
             <img src="https://api.iconify.design/skill-icons:instagram.svg" alt="Instagram" className="w-10 h-10 drop-shadow-sm" />
           </a>
           <a href={LOCALIZACAO_LINK} target="_blank" rel="noopener noreferrer">
-            <img src="https://api.iconify.design/flat-color-icons:google-maps.svg" alt="Localização" className="w-10 h-10 drop-shadow-sm" />
+            <img 
+              src="https://api.iconify.design/logos:google-maps.svg" 
+              alt="Localização" 
+              className="w-10 h-10 drop-shadow-sm" 
+            />
           </a>
         </div>
       </div>
