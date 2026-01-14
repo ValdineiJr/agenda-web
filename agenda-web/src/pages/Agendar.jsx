@@ -22,7 +22,7 @@ function TelaSucesso({ agendamento, servico, profissional, onNovoAgendamento }) 
     minute: '2-digit',
   });
 
-  const numeroWhatsapp = '5519993562075'; 
+  const numeroWhatsapp = '5519988136946'; 
   
   // Mensagem para o WhatsApp incluindo o Profissional
   const mensagemWhatsapp = 
