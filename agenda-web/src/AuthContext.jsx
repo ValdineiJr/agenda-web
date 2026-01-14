@@ -1,114 +1,125 @@
-import { createContext, useState, useEffect, useContext } from 'react';
-import { supabase } from '/src/supabaseClient.js';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
 
-const AuthContext = createContext();
+const AuthContext = createContext({});
 
-export function AuthProvider({ children }) {
+export const useAuth = () => useContext(AuthContext);
+
+export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(true);
 
+  // Função auxiliar para buscar o perfil do usuário
   const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase
-        .from('profissionais')
+        .from('profiles')
         .select('*')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
-      if (error) throw error;
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao buscar perfil:', error);
+      }
       setProfile(data);
     } catch (error) {
-      console.error('AuthContext: Erro perfil:', error);
-      setProfile(null);
+      console.error('Erro interno perfil:', error);
     }
-  };
-
-  const doLogout = async () => {
-    setLoading(true);
-    // Tenta logout no Supabase, mas não espera eternamente
-    try {
-        await supabase.auth.signOut();
-    } catch (e) {
-        console.error("Erro ao deslogar do supabase", e);
-    }
-    // Limpeza forçada local
-    localStorage.clear(); 
-    setSession(null);
-    setProfile(null);
-    setLoading(false);
-    window.location.href = '/login'; 
   };
 
   useEffect(() => {
     let mounted = true;
 
+    // 1. Verificação Inicial da Sessão
     const initializeAuth = async () => {
       try {
-        // --- TRUQUE PARA NÃO TRAVAR ---
-        // Criamos uma promessa que falha após 5 segundos
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Timeout")), 5000)
-        );
-
-        // Corremos: Quem responder primeiro ganha (Supabase ou o Tempo)
-        const { data } = await Promise.race([
-            supabase.auth.getSession(),
-            timeoutPromise
-        ]);
-
-        const currentSession = data?.session;
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         
         if (mounted) {
-          if (currentSession) {
-            setSession(currentSession);
+          if (error) throw error;
+          setSession(currentSession);
+          if (currentSession?.user) {
             await fetchProfile(currentSession.user.id);
           }
         }
       } catch (error) {
-        console.error("Inicialização demorou ou falhou:", error);
-        // Se der erro ou timeout, consideramos não logado e paramos o loading
-        if (mounted) {
-            setSession(null);
-            setProfile(null);
+        console.error("Erro na inicialização da sessão:", error);
+        // Se der erro grave de sessão (ex: refresh token inválido), desloga
+        if (error.message.includes('refresh_token_not_found') || error.status === 400) {
+           await supabase.auth.signOut();
+           setSession(null);
+           setProfile(null);
         }
       } finally {
-        if (mounted) setLoading(false); // LIBERA A TELA DE QUALQUER JEITO
+        if (mounted) setLoading(false);
       }
     };
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        if (mounted) {
-          setSession(newSession);
-          if (newSession) {
-            if (!profile || profile.user_id !== newSession.user.id) {
-               await fetchProfile(newSession.user.id);
-            }
-          } else {
-            setProfile(null);
-          }
-          setLoading(false);
-        }
+    // 2. Escutar mudanças de Login/Logout/Token Refresh
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+      
+      setSession(session);
+      
+      if (session?.user) {
+        // Se acabou de logar e não tem perfil carregado, busca.
+        if (!profile) await fetchProfile(session.user.id);
+      } else {
+        // Se deslogou
+        setProfile(null);
+        setLoading(false); 
       }
-    );
+      
+      // Garante que o loading saia após qualquer mudança de estado
+      setLoading(false);
+    });
+
+    // 3. (NOVO) Auto-Recuperação ao focar na janela
+    // Isso corrige o problema da aba que ficou aberta muito tempo
+    const handleFocus = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error || !session) {
+         // Se ao voltar para a aba a sessão morreu, força o logout visualmente
+         // para o usuário não clicar no vazio.
+         if (session) await supabase.auth.signOut();
+         setSession(null);
+      } else {
+         // Se a sessão existe, atualiza o estado local para garantir
+         setSession(session);
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       mounted = false;
-      subscription?.unsubscribe();
+      subscription.unsubscribe();
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
-  const value = { session, profile, loading, logout: doLogout };
+  const value = {
+    session,
+    profile,
+    loading,
+    isAdmin: profile?.role === 'admin',
+    isProfissional: profile?.role === 'professional',
+    signOut: () => supabase.auth.signOut(),
+  };
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading ? children : (
+        // Um loading simples enquanto verifica a sessão inicial
+        <div className="flex h-screen items-center justify-center bg-gray-50">
+           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuchsia-600"></div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export default AuthProvider;
