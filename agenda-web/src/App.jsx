@@ -6,58 +6,83 @@ import AdminAgendaPage from './pages/AdminAgenda';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './ProtectedRoute'; 
 import AdminRoute from './AdminRoute';
+
+// Importação de TODAS as páginas administrativas
 import ProfissionaisPage from './pages/ProfissionaisPage';
+import ProfissionalEditPage from './pages/ProfissionalEditPage'; 
+import ServicosPage from './pages/ServicosPage';
+import ServicoEditPage from './pages/ServicoEditPage';
+import DashboardPage from './pages/DashboardPage';
+import ClientManagePage from './pages/ClientManagePage'; // Página de consulta do cliente
+import HistoricoPage from './pages/HistoricoPage';
+import ClientesPage from './pages/ClientesPage'; // Página de gestão de clientes (Admin)
+import HomePage from './pages/HomePage';
 
 // --- CONTROLE DE VERSÃO ---
-// Mude este número (ex: 1.0.2) quando fizer atualizações importantes para forçar a limpeza
-const VERSAO_ATUAL = '1.0.1'; 
+const VERSAO_ATUAL = '1.0.2'; // Subi para 1.0.2 para garantir que pegue as rotas novas
 
 function App() {
 
   // --- LÓGICA DE LIMPEZA DE CACHE AUTOMÁTICA ---
   useEffect(() => {
     const versaoSalva = localStorage.getItem('app_versao');
-
-    // Se a versão salva no navegador for diferente da versão atual do código
     if (versaoSalva !== VERSAO_ATUAL) {
       console.log('Nova versão detectada (' + VERSAO_ATUAL + '). Limpando cache...');
-      
-      // 1. Limpa todo o armazenamento local (tokens, sessões antigas)
       localStorage.clear();
       sessionStorage.clear();
-      
-      // 2. Salva a nova versão para não limpar novamente no próximo acesso
       localStorage.setItem('app_versao', VERSAO_ATUAL);
-      
-      // 3. Opcional: Recarrega a página para garantir que a memória RAM também limpe
+      // O reload é opcional, mas ajuda a garantir a limpeza
       // window.location.reload(); 
     }
   }, []);
-  // ------------------------------------------------
 
   return (
     <Routes>
       {/* --- Rotas Públicas (Cliente) --- */}
       <Route path="/" element={<Layout />}>
-        <Route index element={<AgendarPage />} />
+        <Route index element={<HomePage />} /> 
+        <Route path="agendar" element={<AgendarPage />} />
         <Route path="login" element={<LoginPage />} />
+        <Route path="consultar" element={<ClientManagePage />} />
       </Route>
 
-      {/* --- Rotas Protegidas (Logado - Admin OU Profissional) --- */}
+      {/* --- Rotas Protegidas (Admin Geral - Agenda) --- */}
       <Route element={<ProtectedRoute />}> 
         <Route path="/admin" element={<Layout />}>
           <Route index element={<AdminAgendaPage />} />
-          {/* A rota /admin (agenda) é acessível por ambos */}
         </Route>
       </Route>
 
-      {/* --- Rotas SÓ DE ADMIN (Só Admin) --- */}
-      <Route element={<AdminRoute />}> {/* Usa o novo "Porteiro" */}
+      {/* --- Rotas EXCLUSIVAS DE ADMIN (Gestão) --- */}
+      <Route element={<AdminRoute />}> 
+        
+        {/* Gestão de Profissionais */}
         <Route path="/admin/profissionais" element={<Layout />}>
-          <Route index element={<ProfissionaisPage />} />
+          <Route index element={<ProfissionaisPage />} /> 
+          <Route path=":id" element={<ProfissionalEditPage />} /> {/* Faltava essa rota de edição */}
         </Route>
+
+        {/* Gestão de Serviços */}
+        <Route path="/admin/servicos" element={<Layout />}>
+          <Route index element={<ServicosPage />} />
+          <Route path=":id" element={<ServicoEditPage />} />
+        </Route>
+
+        {/* Dashboards e Relatórios */}
+        <Route path="/admin/dashboard" element={<Layout />}>
+          <Route index element={<DashboardPage />} />
+        </Route>
+        
+        <Route path="/admin/historico" element={<Layout />}>
+          <Route index element={<HistoricoPage />} />
+        </Route>
+
+        {/* Gestão de Clientes */}
+        <Route path="/admin/clientes" element={<Layout />}>
+          <Route index element={<ClientesPage />} />
+        </Route>
+
       </Route>
-      
     </Routes>
   );
 }
