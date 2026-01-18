@@ -157,7 +157,7 @@ function AgendarPage() {
   
   const hoje = new Date();
   const umMesDepois = new Date();
-  umMesDepois.setMonth(hoje.getMonth() + 1);
+  umMesDepois.setMonth(hoje.getMonth() + 2); // Aumentei para 2 meses para pegar datas mais distantes
 
   // --- EFEITO 1: Carregar dados Iniciais e LocalStorage ---
   useEffect(() => {
@@ -178,7 +178,7 @@ function AgendarPage() {
       const { data: catData } = await supabase.from('categorias').select('*').order('nome');
       if (catData) setCategorias(catData);
 
-      // Serviços (Todos)
+      // Serviços (Todos) - O select('*') já pegará a coluna datas_especificas se ela existir
       const { data: servData } = await supabase.from('servicos').select('*').order('nome');
       if (servData) setTodosServicos(servData);
     };
@@ -230,13 +230,35 @@ function AgendarPage() {
     setHorarioSelecionado(null);
     setHorariosDisponiveis([]);
     
+    // --- VERIFICAÇÃO DE DATA (Híbrida: Dia da Semana ou Data Específica) ---
     const diaDaSemana = dataAlvo.getDay();
+    const dataAlvoISO = dataAlvo.toISOString().split('T')[0];
     
-    // 1. Verifica se o serviço atende nesse dia
-    if (servicoSelecionado.dias_disponiveis && !servicoSelecionado.dias_disponiveis.includes(diaDaSemana)) {
-      console.warn("Serviço fechado neste dia.");
-      setIsLoadingHorarios(false);
-      return; 
+    let diaValido = false;
+
+    // Cenário 1: Serviço tem Datas Específicas (ex: Laser Day)
+    if (servicoSelecionado.datas_especificas && Array.isArray(servicoSelecionado.datas_especificas) && servicoSelecionado.datas_especificas.length > 0) {
+        if (servicoSelecionado.datas_especificas.includes(dataAlvoISO)) {
+            diaValido = true;
+        } else {
+            console.warn("Esta data não está na lista de datas específicas do serviço.");
+            setIsLoadingHorarios(false);
+            return;
+        }
+    } 
+    // Cenário 2: Serviço funciona por Dias da Semana (ex: Terça e Quinta)
+    else if (servicoSelecionado.dias_disponiveis && servicoSelecionado.dias_disponiveis.length > 0) {
+        if (servicoSelecionado.dias_disponiveis.includes(diaDaSemana)) {
+            diaValido = true;
+        } else {
+            console.warn("Serviço fechado neste dia da semana.");
+            setIsLoadingHorarios(false);
+            return;
+        }
+    }
+    // Cenário 3: Sem restrições
+    else {
+        diaValido = true;
     }
     
     const duracaoServico = servicoSelecionado.duracao_minutos;
@@ -251,6 +273,8 @@ function AgendarPage() {
       
     if (errorHorario || !horarioTrabalho) {
       console.warn("Profissional não trabalha neste dia.");
+      // Se for uma data específica, talvez o profissional não tenha horário fixo na tabela 'horarios_trabalho'
+      // Idealmente, você teria uma exceção, mas vamos manter o fluxo padrão por enquanto.
       setIsLoadingHorarios(false);
       return;
     }
@@ -316,10 +340,9 @@ function AgendarPage() {
     setIsLoadingHorarios(false);
   }
 
-  // --- HANDLER DE DATA (CORRIGIDO) ---
+  // --- HANDLER DE DATA ---
   const handleDateChange = (date) => {
     setDataSelecionada(date);
-    // CORREÇÃO CRUCIAL: Busca imediata com a nova data
     buscarHorariosDisponiveis(date); 
     setEtapa(4); // Avança tela
     window.scrollTo(0, 0);
@@ -426,7 +449,9 @@ function AgendarPage() {
 
   const formatarHorario = (date) => date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-  const filtrarDiaPorServico = (data) => {
+  // --- FUNÇÃO AUXILIAR DE FILTRO PARA O CALENDÁRIO ---
+  // Essa função é usada SOMENTE se o serviço NÃO tiver datas específicas
+  const filtrarDiaPorSemana = (data) => {
     if (!servicoSelecionado) return true;
     if (!servicoSelecionado.dias_disponiveis) return true;
     const dia = data.getDay();
@@ -526,24 +551,59 @@ function AgendarPage() {
           </div>
         );
 
-      case 3: // DATA
-        return (
-          <div className="animate-fade-in">
-            <h2 className="text-xl font-semibold mb-4">Selecione a Data:</h2>
-            <div className="flex justify-center">
-              <DatePicker
-                selected={dataSelecionada}
-                onChange={handleDateChange} 
-                inline locale="pt-BR"
-                minDate={hoje} maxDate={umMesDepois} 
-                filterDate={filtrarDiaPorServico}
-                wrapperClassName="w-full"
-                calendarClassName="w-full"
-              />
+      case 3: // DATA (COM LÓGICA DE DATAS ESPECÍFICAS)
+        {
+          // Lógica para preparar o DatePicker
+          let datePickerProps = {};
+          let temDatasEspecificas = false;
+
+          if (servicoSelecionado && servicoSelecionado.datas_especificas && servicoSelecionado.datas_especificas.length > 0) {
+             temDatasEspecificas = true;
+             
+             // Converte as strings "YYYY-MM-DD" para objetos Date REAIS
+             // Atenção: new Date("2025-11-15") pode dar problema de fuso e cair no dia 14.
+             // Melhor forma: new Date(ano, mes-1, dia)
+             const datasPermitidas = servicoSelecionado.datas_especificas.map(dataStr => {
+                 const [ano, mes, dia] = dataStr.split('-').map(Number);
+                 return new Date(ano, mes - 1, dia);
+             });
+
+             // Configura o DatePicker para aceitar APENAS essas datas
+             datePickerProps.includeDates = datasPermitidas;
+             datePickerProps.highlightDates = datasPermitidas;
+          } else {
+             // Lógica padrão: Filtra dias da semana
+             datePickerProps.filterDate = filtrarDiaPorSemana;
+          }
+
+          return (
+            <div className="animate-fade-in">
+              <h2 className="text-xl font-semibold mb-2">Selecione a Data:</h2>
+              
+              {temDatasEspecificas && (
+                 <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-2 rounded-md mb-4 text-sm text-center">
+                    <strong>Atenção:</strong> Este serviço possui datas especiais. <br/>Apenas os dias habilitados no calendário estão disponíveis.
+                 </div>
+              )}
+
+              <div className="flex justify-center">
+                <DatePicker
+                  selected={dataSelecionada}
+                  onChange={handleDateChange} 
+                  inline locale="pt-BR"
+                  minDate={hoje} maxDate={umMesDepois}
+                  
+                  // Aplica as props dinâmicas (includeDates ou filterDate)
+                  {...datePickerProps}
+                  
+                  wrapperClassName="w-full"
+                  calendarClassName="w-full"
+                />
+              </div>
+              <p className="text-center text-xs text-gray-400 mt-2">Clique na data para ver os horários.</p>
             </div>
-            <p className="text-center text-xs text-gray-400 mt-2">Clique na data para ver os horários.</p>
-          </div>
-        );
+          );
+        }
 
       case 4: // HORÁRIO
         return (
