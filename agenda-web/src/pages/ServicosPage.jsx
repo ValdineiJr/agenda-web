@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '/src/supabaseClient.js';
 import { Link } from 'react-router-dom';
 
+// --- NOVOS IMPORTS PARA O CALENDÁRIO ---
+import DatePicker, { registerLocale } from 'react-datepicker';
+import { ptBR } from 'date-fns/locale';
+import 'react-datepicker/dist/react-datepicker.css';
+
+// Registra o idioma português para o calendário
+registerLocale('pt-BR', ptBR);
+
 const DIAS_SEMANA = [
   { numero: 0, nome: 'Dom' }, { numero: 1, nome: 'Seg' }, { numero: 2, nome: 'Ter' },
   { numero: 3, nome: 'Qua' }, { numero: 4, nome: 'Qui' }, { numero: 5, nome: 'Sex' }, { numero: 6, nome: 'Sab' },
@@ -23,12 +31,16 @@ function ServicosPage() {
   const [preco, setPreco] = useState(0);
   const [foto, setFoto] = useState(null); 
   const [categoriaId, setCategoriaId] = useState('');
-  const [diasSelecionados, setDiasSelecionados] = useState(new Set([0,1,2,3,4,5,6]));
   
+  // --- CONFIGURAÇÃO DE DISPONIBILIDADE (NOVO) ---
+  const [tipoDisponibilidade, setTipoDisponibilidade] = useState('semanal'); // 'semanal' ou 'datas'
+  const [diasSelecionados, setDiasSelecionados] = useState(new Set([0,1,2,3,4,5,6])); // Para Semanal
+  const [datasEspecificas, setDatasEspecificas] = useState([]); // Para Datas Específicas (Array de Date)
+
   // --- FORMULÁRIO CATEGORIA ---
   const [catNome, setCatNome] = useState('');
   const [catFoto, setCatFoto] = useState(null);
-  const [editingCategory, setEditingCategory] = useState(null); // NOVO: Guarda a categoria sendo editada
+  const [editingCategory, setEditingCategory] = useState(null);
 
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -40,9 +52,10 @@ function ServicosPage() {
 
   async function fetchDados() {
     setLoading(true);
-    // Busca Serviços
-    const { data: sData } = await supabase.from('servicos').select('*, categorias(nome)').order('nome');
+    // Busca Serviços (Incluindo a nova coluna datas_especificas se existir)
+    const { data: sData, error: sError } = await supabase.from('servicos').select('*, categorias(nome)').order('nome');
     if (sData) setServicos(sData);
+    if (sError) console.error("Erro ao buscar serviços:", sError);
     
     // Busca Categorias
     const { data: cData } = await supabase.from('categorias').select('*').order('nome');
@@ -63,12 +76,29 @@ function ServicosPage() {
   // ==========================================
   //          LÓGICA DE SERVIÇOS
   // ==========================================
+  
+  // Toggle para Dias da Semana (Dom, Seg...)
   const handleDiaToggle = (dia) => {
     setDiasSelecionados(prev => {
       const novos = new Set(prev);
       novos.has(dia) ? novos.delete(dia) : novos.add(dia);
       return novos;
     });
+  };
+
+  // Toggle para Datas Específicas (Calendário)
+  const handleDataEspecificaSelect = (date) => {
+    // Verifica se a data já está selecionada (compara strings YYYY-MM-DD)
+    const dateStr = date.toISOString().split('T')[0];
+    const exists = datasEspecificas.some(d => d.toISOString().split('T')[0] === dateStr);
+
+    if (exists) {
+      // Remove se já existe
+      setDatasEspecificas(datasEspecificas.filter(d => d.toISOString().split('T')[0] !== dateStr));
+    } else {
+      // Adiciona se não existe
+      setDatasEspecificas([...datasEspecificas, date]);
+    }
   };
 
   const handleSubmitServico = async (e) => {
@@ -79,9 +109,26 @@ function ServicosPage() {
       setError('Preencha Nome, Duração, Preço e selecione uma Categoria.');
       return;
     }
-    if (diasSelecionados.size === 0) {
-      setError('Selecione pelo menos um dia.');
-      return;
+
+    // Validação da disponibilidade
+    let payloadDias = null;
+    let payloadDatas = null;
+
+    if (tipoDisponibilidade === 'semanal') {
+       if (diasSelecionados.size === 0) {
+         setError('Selecione pelo menos um dia da semana.');
+         return;
+       }
+       payloadDias = Array.from(diasSelecionados);
+       payloadDatas = null; // Limpa datas específicas
+    } else {
+       if (datasEspecificas.length === 0) {
+         setError('Selecione pelo menos uma data no calendário.');
+         return;
+       }
+       // Converte objetos Date para strings "YYYY-MM-DD" para salvar no banco JSON
+       payloadDatas = datasEspecificas.map(d => d.toISOString().split('T')[0]);
+       payloadDias = null; // Limpa dias da semana
     }
 
     setIsUploading(true);
@@ -90,17 +137,26 @@ function ServicosPage() {
       if (foto) fotoUrl = await uploadImage(foto, 'servico-fotos');
 
       const { error } = await supabase.from('servicos').insert({
-        nome, descricao, duracao_minutos: duracao, preco,
+        nome, 
+        descricao, 
+        duracao_minutos: duracao, 
+        preco,
         foto_url: fotoUrl,
         categoria_id: categoriaId,
-        dias_disponiveis: Array.from(diasSelecionados)
+        dias_disponiveis: payloadDias,       // Salva dias ou null
+        datas_especificas: payloadDatas      // Salva array de datas ou null
       });
 
       if (error) throw error;
 
       setSuccess('Serviço criado com sucesso!');
+      
+      // Reseta formulário
       setNome(''); setDescricao(''); setDuracao(30); setPreco(0); setFoto(null); setCategoriaId('');
+      setTipoDisponibilidade('semanal');
       setDiasSelecionados(new Set([0,1,2,3,4,5,6]));
+      setDatasEspecificas([]);
+      
       const fileInput = document.getElementById('file-upload');
       if(fileInput) fileInput.value = '';
       
@@ -123,14 +179,13 @@ function ServicosPage() {
   //          LÓGICA DE CATEGORIAS (CRUD)
   // ==========================================
   
-  // Prepara o formulário para EDIÇÃO
   const handleEditCategoryClick = (categoria) => {
     setEditingCategory(categoria);
     setCatNome(categoria.nome);
-    setCatFoto(null); // Reseta o input de arquivo (não baixamos a foto antiga, só guardamos a URL se não mudar)
+    setCatFoto(null); 
     setError(null);
     setSuccess(null);
-    window.scrollTo(0, 0); // Sobe a tela para o formulário
+    window.scrollTo(0, 0); 
   };
 
   const handleCancelEditCategory = () => {
@@ -150,36 +205,28 @@ function ServicosPage() {
     setIsUploading(true);
     try {
       let fotoUrl = editingCategory ? editingCategory.foto_url : null;
-
-      // Se selecionou uma nova foto, faz o upload e substitui a URL
       if (catFoto) {
          fotoUrl = await uploadImage(catFoto, 'servico-fotos'); 
       }
 
       if (editingCategory) {
-        // --- MODO ATUALIZAR ---
         const { error } = await supabase
           .from('categorias')
           .update({ nome: catNome, foto_url: fotoUrl })
           .eq('id', editingCategory.id);
-        
         if (error) throw error;
         setSuccess('Categoria atualizada com sucesso!');
       } else {
-        // --- MODO CRIAR ---
         const { error } = await supabase.from('categorias').insert({
           nome: catNome,
           foto_url: fotoUrl
         });
-        
         if (error) throw error;
         setSuccess('Categoria criada com sucesso!');
       }
 
-      // Limpa tudo
       setEditingCategory(null);
-      setCatNome(''); 
-      setCatFoto(null);
+      setCatNome(''); setCatFoto(null);
       const catInput = document.getElementById('cat-upload');
       if(catInput) catInput.value = '';
 
@@ -193,18 +240,9 @@ function ServicosPage() {
 
   const handleDeleteCategoria = async (id) => {
     if(!confirm('Tem certeza? Serviços nesta categoria ficarão "Sem Categoria".')) return;
-    
-    // 1. Desvincula serviços
     await supabase.from('servicos').update({ categoria_id: null }).eq('categoria_id', id);
-    
-    // 2. Deleta categoria
     const { error } = await supabase.from('categorias').delete().eq('id', id);
-    
-    if (error) {
-      alert('Erro ao deletar: ' + error.message);
-    } else {
-      fetchDados();
-    }
+    if (error) { alert('Erro ao deletar: ' + error.message); } else { fetchDados(); }
   };
 
   // ==========================================
@@ -247,7 +285,6 @@ function ServicosPage() {
             </div>
 
             <form onSubmit={handleSubmitServico} className="space-y-6">
-              {/* ... Campos do Serviço (Mantidos Modernos) ... */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nome do Serviço</label>
@@ -278,17 +315,78 @@ function ServicosPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Dias Disponíveis</label>
-                <div className="flex flex-wrap gap-2">
-                  {DIAS_SEMANA.map(dia => (
-                    <label key={dia.numero} className={`flex items-center justify-center px-4 py-2 rounded-full cursor-pointer text-sm font-medium transition-all border select-none ${diasSelecionados.has(dia.numero) ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-md' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
-                      <input type="checkbox" checked={diasSelecionados.has(dia.numero)} onChange={() => handleDiaToggle(dia.numero)} className="hidden" />
-                      {dia.nome}
+              {/* --- ÁREA DE DISPONIBILIDADE (ALTERADA) --- */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                 <label className="block text-sm font-bold text-gray-700 mb-3">Tipo de Disponibilidade</label>
+                 
+                 {/* Seletor de Tipo */}
+                 <div className="flex gap-4 mb-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name="tipoDisp" 
+                        checked={tipoDisponibilidade === 'semanal'} 
+                        onChange={() => setTipoDisponibilidade('semanal')}
+                        className="text-fuchsia-600 focus:ring-fuchsia-500"
+                      />
+                      <span className="text-gray-700 font-medium">Dias da Semana (Recorrente)</span>
                     </label>
-                  ))}
-                </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name="tipoDisp" 
+                        checked={tipoDisponibilidade === 'datas'} 
+                        onChange={() => setTipoDisponibilidade('datas')}
+                        className="text-fuchsia-600 focus:ring-fuchsia-500"
+                      />
+                      <span className="text-gray-700 font-medium">Datas Específicas (Calendário)</span>
+                    </label>
+                 </div>
+
+                 {/* Opção 1: Dias da Semana */}
+                 {tipoDisponibilidade === 'semanal' && (
+                   <div>
+                     <p className="text-xs text-gray-500 mb-2">O serviço estará disponível toda semana nestes dias:</p>
+                     <div className="flex flex-wrap gap-2">
+                       {DIAS_SEMANA.map(dia => (
+                         <label key={dia.numero} className={`flex items-center justify-center px-4 py-2 rounded-full cursor-pointer text-sm font-medium transition-all border select-none ${diasSelecionados.has(dia.numero) ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-md' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                           <input type="checkbox" checked={diasSelecionados.has(dia.numero)} onChange={() => handleDiaToggle(dia.numero)} className="hidden" />
+                           {dia.nome}
+                         </label>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+
+                 {/* Opção 2: Calendário de Datas */}
+                 {tipoDisponibilidade === 'datas' && (
+                   <div className="text-center">
+                     <p className="text-xs text-gray-500 mb-2">Clique nas datas para adicionar ou remover (ex: Dia do Laser, Botox Day):</p>
+                     <div className="inline-block border rounded-lg bg-white p-2">
+                        <DatePicker
+                           selected={null}
+                           onChange={handleDataEspecificaSelect}
+                           inline
+                           locale="pt-BR"
+                           minDate={new Date()}
+                           highlightDates={datasEspecificas} // Destaca as datas selecionadas
+                           dayClassName={(date) => {
+                              // Estiliza os dias selecionados para ficarem bem visíveis
+                              const dateStr = date.toISOString().split('T')[0];
+                              return datasEspecificas.some(d => d.toISOString().split('T')[0] === dateStr)
+                                ? "bg-fuchsia-600 text-white font-bold rounded-full hover:bg-fuchsia-700" 
+                                : undefined;
+                           }}
+                        />
+                     </div>
+                     <div className="mt-2 text-sm text-fuchsia-700 font-bold">
+                        {datasEspecificas.length} datas selecionadas
+                     </div>
+                   </div>
+                 )}
               </div>
+              {/* --- FIM DA ÁREA DE DISPONIBILIDADE --- */}
 
               <div>
                  <label className="block text-sm font-semibold text-gray-700 mb-2">Foto do Serviço</label>
@@ -318,7 +416,15 @@ function ServicosPage() {
                        <img src={s.foto_url || 'https://via.placeholder.com/150'} className="w-14 h-14 rounded-lg object-cover bg-gray-100" />
                        <div>
                           <p className="font-bold text-gray-800">{s.nome}</p>
-                          <p className="text-xs text-gray-500 font-medium uppercase">{s.categorias?.nome || 'Sem Categoria'}</p>
+                          <div className="text-xs text-gray-500 font-medium uppercase">
+                             {s.categorias?.nome || 'Sem Categoria'} 
+                             {/* Mostra tag se for data específica */}
+                             {s.datas_especificas && s.datas_especificas.length > 0 && (
+                                <span className="ml-2 bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-[10px] border border-yellow-200">
+                                  📅 Datas Especiais
+                                </span>
+                             )}
+                          </div>
                        </div>
                     </div>
                     <div className="flex gap-3 text-sm font-medium">
@@ -332,11 +438,9 @@ function ServicosPage() {
         </div>
       )}
 
-      {/* --- CONTEÚDO ABA CATEGORIAS --- */}
+      {/* --- CONTEÚDO ABA CATEGORIAS (Mantido igual) --- */}
       {activeTab === 'categorias' && (
         <div className="space-y-8 animate-fade-in">
-          
-          {/* Form Categoria (AGORA COM EDIÇÃO) */}
           <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
             <div className="flex items-center gap-2 mb-6">
                <div className="bg-indigo-100 p-2 rounded-full text-indigo-600">
@@ -349,45 +453,24 @@ function ServicosPage() {
             
             <form onSubmit={handleSubmitCategoria} className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {/* Nome */}
                  <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Nome da Categoria</label>
-                    <input 
-                      type="text" 
-                      value={catNome} 
-                      onChange={e => setCatNome(e.target.value)} 
-                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all outline-none" 
-                      placeholder="Ex: Cabelos" 
-                    />
+                    <input type="text" value={catNome} onChange={e => setCatNome(e.target.value)} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all outline-none" placeholder="Ex: Cabelos" />
                  </div>
-
-                 {/* Foto (Upload) */}
                  <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">
                       {editingCategory ? 'Trocar Foto (Opcional)' : 'Foto de Capa'}
                     </label>
-                    <input 
-                      id="cat-upload"
-                      type="file" 
-                      onChange={e => setCatFoto(e.target.files[0])} 
-                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-gray-200 rounded-lg cursor-pointer" 
-                    />
+                    <input id="cat-upload" type="file" onChange={e => setCatFoto(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-gray-200 rounded-lg cursor-pointer" />
                  </div>
                </div>
 
                <div className="flex gap-3">
-                 {/* Botão Salvar/Criar */}
                  <button disabled={isUploading} className="flex-1 md:flex-none py-2.5 px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-all disabled:bg-gray-400">
                    {isUploading ? 'Salvando...' : (editingCategory ? 'Atualizar Categoria' : 'Criar Categoria')}
                  </button>
-                 
-                 {/* Botão Cancelar (Só aparece na edição) */}
                  {editingCategory && (
-                   <button 
-                     type="button" 
-                     onClick={handleCancelEditCategory}
-                     className="flex-1 md:flex-none py-2.5 px-6 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-all"
-                   >
+                   <button type="button" onClick={handleCancelEditCategory} className="flex-1 md:flex-none py-2.5 px-6 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-all">
                      Cancelar
                    </button>
                  )}
@@ -395,7 +478,6 @@ function ServicosPage() {
             </form>
           </div>
 
-          {/* Lista Categorias (COM ÍCONES DE AÇÃO) */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
              <h2 className="text-xl font-bold mb-6 text-gray-800">Categorias Cadastradas</h2>
              {categorias.length === 0 ? (
@@ -404,31 +486,15 @@ function ServicosPage() {
                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                  {categorias.map(c => (
                    <div key={c.id} className={`border rounded-xl p-4 text-center relative group hover:shadow-lg transition-all bg-white ${editingCategory?.id === c.id ? 'ring-2 ring-indigo-500 bg-indigo-50' : 'border-gray-200'}`}>
-                      
-                      {/* Imagem */}
                       <div className="w-20 h-20 mx-auto mb-3 rounded-full p-1 border-2 border-fuchsia-100 relative overflow-hidden">
                          <img src={c.foto_url || 'https://via.placeholder.com/100'} className="w-full h-full rounded-full object-cover bg-gray-100" />
                       </div>
-                      
-                      {/* Nome */}
                       <p className="font-bold text-gray-800 mb-2">{c.nome}</p>
-                      
-                      {/* Botões de Ação (Aparecem no Hover ou sempre no mobile) */}
                       <div className="flex justify-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
-                        {/* Editar */}
-                        <button 
-                          onClick={() => handleEditCategoryClick(c)}
-                          className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 shadow-sm"
-                          title="Editar"
-                        >
+                        <button onClick={() => handleEditCategoryClick(c)} className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 shadow-sm" title="Editar">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                         </button>
-                        {/* Excluir */}
-                        <button 
-                          onClick={() => handleDeleteCategoria(c.id)}
-                          className="p-2 bg-red-50 text-red-600 rounded-full hover:bg-red-100 shadow-sm"
-                          title="Excluir"
-                        >
+                        <button onClick={() => handleDeleteCategoria(c.id)} className="p-2 bg-red-50 text-red-600 rounded-full hover:bg-red-100 shadow-sm" title="Excluir">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       </div>
