@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+// CORREÇÃO AQUI: O caminho certo é ./supabaseClient e não ./lib/supabase
+import { supabase } from './supabaseClient'; 
 
 const AuthContext = createContext({});
 
@@ -45,8 +46,8 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error("Erro na inicialização da sessão:", error);
-        // Se der erro grave de sessão (ex: refresh token inválido), desloga
-        if (error.message.includes('refresh_token_not_found') || error.status === 400) {
+        // Se der erro grave de sessão, desloga
+        if (error.message && (error.message.includes('refresh_token_not_found') || error.status === 400)) {
            await supabase.auth.signOut();
            setSession(null);
            setProfile(null);
@@ -58,36 +59,29 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
-    // 2. Escutar mudanças de Login/Logout/Token Refresh
+    // 2. Escutar mudanças de Login/Logout
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
       
       setSession(session);
       
       if (session?.user) {
-        // Se acabou de logar e não tem perfil carregado, busca.
         if (!profile) await fetchProfile(session.user.id);
       } else {
-        // Se deslogou
         setProfile(null);
         setLoading(false); 
       }
       
-      // Garante que o loading saia após qualquer mudança de estado
       setLoading(false);
     });
 
-    // 3. (NOVO) Auto-Recuperação ao focar na janela
-    // Isso corrige o problema da aba que ficou aberta muito tempo
+    // 3. Auto-Recuperação ao focar na janela (Anti-travamento)
     const handleFocus = async () => {
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error || !session) {
-         // Se ao voltar para a aba a sessão morreu, força o logout visualmente
-         // para o usuário não clicar no vazio.
          if (session) await supabase.auth.signOut();
          setSession(null);
       } else {
-         // Se a sessão existe, atualiza o estado local para garantir
          setSession(session);
       }
     };
@@ -113,7 +107,6 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={value}>
       {!loading ? children : (
-        // Um loading simples enquanto verifica a sessão inicial
         <div className="flex h-screen items-center justify-center bg-gray-50">
            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuchsia-600"></div>
         </div>
