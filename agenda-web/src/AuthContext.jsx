@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from './supabaseClient'; // Caminho corrigido
+import { supabase } from './supabaseClient';
 
 const AuthContext = createContext({});
 
@@ -25,13 +25,14 @@ export const AuthProvider = ({ children }) => {
       setProfile(data);
     } catch (error) {
       console.error('Erro interno perfil:', error);
+      setProfile(null); // Garante que não fica undefined
     }
   };
 
   useEffect(() => {
     let mounted = true;
 
-    // 1. Verificação Inicial da Sessão (SEM TIMEOUT)
+    // 1. Verificação Inicial da Sessão
     const initializeAuth = async () => {
       try {
         const { data: { session: currentSession }, error } = await supabase.auth.getSession();
@@ -47,7 +48,7 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error("Erro na inicialização da sessão:", error);
-        // Se der erro grave de token, desloga para evitar loop
+        // Se der erro grave de token (400), desloga para evitar loop
         if (error.message && (error.message.includes('refresh_token_not_found') || error.status === 400)) {
            await supabase.auth.signOut();
            setSession(null);
@@ -97,13 +98,18 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  // --- CORREÇÃO DO ERRO DE TELA BRANCA ---
+  // Aqui garantimos que só acessamos .role se profile existir.
+  // Usamos verificação explícita para evitar o erro "reading role of null"
+  const isAdmin = (profile && profile.role === 'admin') ? true : false;
+  const isProfissional = (profile && profile.role === 'professional') ? true : false;
+
   const value = {
     session,
     profile,
     loading,
-    // Verificações seguras com ?. para não quebrar se o perfil demorar
-    isAdmin: profile?.role === 'admin',
-    isProfissional: profile?.role === 'professional',
+    isAdmin,
+    isProfissional,
     signOut: () => supabase.auth.signOut(),
   };
 

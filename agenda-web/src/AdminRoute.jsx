@@ -3,13 +3,14 @@ import { useAuth } from './AuthContext';
 import { useState, useEffect } from 'react';
 
 function AdminRoute() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, isAdmin } = useAuth();
   const [demorou, setDemorou] = useState(false);
 
+  // Timer para mostrar botão de socorro se a internet estiver lenta
   useEffect(() => {
     let timer;
     if (loading) {
-      timer = setTimeout(() => setDemorou(true), 3000);
+      timer = setTimeout(() => setDemorou(true), 3000); // 3 segundos
     }
     return () => clearTimeout(timer);
   }, [loading]);
@@ -27,11 +28,11 @@ function AdminRoute() {
         <p>Verificando permissões...</p>
         
         {demorou && (
-          <div className="text-center">
-             <p className="text-sm text-gray-500 mb-2">Travou?</p>
+          <div className="text-center animate-fade-in">
+             <p className="text-sm text-gray-500 mb-2">Está demorando muito?</p>
              <button 
                onClick={forcarReinico}
-               className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors"
+               className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors shadow-sm"
              >
                Clique aqui para Limpar e Reiniciar
              </button>
@@ -41,11 +42,13 @@ function AdminRoute() {
     ); 
   }
 
+  // Se não tem sessão ou o perfil falhou em carregar, manda pro login
   if (!session || !profile) {
     return <Navigate to="/login" replace />;
   }
 
-  if (profile.role !== 'admin') {
+  // Se tem perfil mas não é admin, manda pra home do admin (ou onde preferir)
+  if (!isAdmin) {
     return <Navigate to="/admin" replace />; 
   }
 

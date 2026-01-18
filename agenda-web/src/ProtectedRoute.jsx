@@ -6,6 +6,7 @@ function ProtectedRoute() {
   const { session, loading } = useAuth(); 
   const [demorou, setDemorou] = useState(false);
 
+  // Timer para mostrar botão de socorro se travar
   useEffect(() => {
     let timer;
     if (loading) {
@@ -14,7 +15,7 @@ function ProtectedRoute() {
     return () => clearTimeout(timer);
   }, [loading]);
 
-  // Função de Limpeza Forçada
+  // Função de Limpeza Forçada (Funcionalidade Original Mantida)
   const forcarReinico = () => {
     console.log("Limpando cache local e forçando reload...");
     localStorage.clear(); // Apaga tokens locais
@@ -29,11 +30,11 @@ function ProtectedRoute() {
         <p>Carregando sistema...</p>
         
         {demorou && (
-          <div className="text-center">
+          <div className="text-center animate-fade-in">
             <p className="text-sm text-gray-500 mb-2">Está demorando muito?</p>
             <button 
               onClick={forcarReinico}
-              className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors"
+              className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors shadow-sm"
             >
               Clique aqui para Limpar e Reiniciar
             </button>
