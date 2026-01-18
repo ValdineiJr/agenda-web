@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-// CORREÇÃO AQUI: O caminho certo é ./supabaseClient e não ./lib/supabase
-import { supabase } from './supabaseClient'; 
+import { supabase } from './supabaseClient'; // Caminho corrigido
 
 const AuthContext = createContext({});
 
@@ -32,7 +31,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let mounted = true;
 
-    // 1. Verificação Inicial da Sessão
+    // 1. Verificação Inicial da Sessão (SEM TIMEOUT)
     const initializeAuth = async () => {
       try {
         const { data: { session: currentSession }, error } = await supabase.auth.getSession();
@@ -40,13 +39,15 @@ export const AuthProvider = ({ children }) => {
         if (mounted) {
           if (error) throw error;
           setSession(currentSession);
+          
+          // Se tem sessão, busca o perfil
           if (currentSession?.user) {
             await fetchProfile(currentSession.user.id);
           }
         }
       } catch (error) {
         console.error("Erro na inicialização da sessão:", error);
-        // Se der erro grave de sessão, desloga
+        // Se der erro grave de token, desloga para evitar loop
         if (error.message && (error.message.includes('refresh_token_not_found') || error.status === 400)) {
            await supabase.auth.signOut();
            setSession(null);
@@ -66,6 +67,7 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       
       if (session?.user) {
+        // Se logou e não tem perfil, busca agora
         if (!profile) await fetchProfile(session.user.id);
       } else {
         setProfile(null);
@@ -99,6 +101,7 @@ export const AuthProvider = ({ children }) => {
     session,
     profile,
     loading,
+    // Verificações seguras com ?. para não quebrar se o perfil demorar
     isAdmin: profile?.role === 'admin',
     isProfissional: profile?.role === 'professional',
     signOut: () => supabase.auth.signOut(),
