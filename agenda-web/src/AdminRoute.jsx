@@ -47,9 +47,12 @@ function AdminRoute() {
     return <Navigate to="/login" replace />;
   }
 
-  // Se tem perfil mas não é admin, manda pra home do admin (ou onde preferir)
+  // --- CORREÇÃO AQUI ---
+  // Se tem perfil mas não é admin, NÃO mande para /admin novamente (causa loop).
+  // Mande para a raiz '/' ou para '/painel' ou a rota principal do usuário comum.
   if (!isAdmin) {
-    return <Navigate to="/admin" replace />; 
+    // Alterei de '/admin' para '/' (Home/Dashboard) para evitar a tela branca
+    return <Navigate to="/" replace />; 
   }
 
   return <Outlet />;
