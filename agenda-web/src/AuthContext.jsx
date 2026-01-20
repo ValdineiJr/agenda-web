@@ -22,10 +22,10 @@ export const AuthProvider = ({ children }) => {
       if (error && error.code !== 'PGRST116') {
         console.error('Erro ao buscar perfil:', error);
       }
-      setProfile(data);
+      setProfile(data || null); // Garante que seja null se vier undefined
     } catch (error) {
       console.error('Erro interno perfil:', error);
-      setProfile(null); // Garante que não fica undefined
+      setProfile(null); 
     }
   };
 
@@ -41,14 +41,12 @@ export const AuthProvider = ({ children }) => {
           if (error) throw error;
           setSession(currentSession);
           
-          // Se tem sessão, busca o perfil
           if (currentSession?.user) {
             await fetchProfile(currentSession.user.id);
           }
         }
       } catch (error) {
         console.error("Erro na inicialização da sessão:", error);
-        // Se der erro grave de token (400), desloga para evitar loop
         if (error.message && (error.message.includes('refresh_token_not_found') || error.status === 400)) {
            await supabase.auth.signOut();
            setSession(null);
@@ -68,22 +66,20 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       
       if (session?.user) {
-        // Se logou e não tem perfil, busca agora
         if (!profile) await fetchProfile(session.user.id);
       } else {
         setProfile(null);
-        setLoading(false); 
       }
-      
       setLoading(false);
     });
 
-    // 3. Auto-Recuperação ao focar na janela (Anti-travamento)
+    // 3. Auto-Recuperação mantida (Sua funcionalidade original)
     const handleFocus = async () => {
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error || !session) {
          if (session) await supabase.auth.signOut();
          setSession(null);
+         setProfile(null); // Adicionei segurança para limpar perfil também
       } else {
          setSession(session);
       }
@@ -98,11 +94,12 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // --- CORREÇÃO DO ERRO DE TELA BRANCA ---
-  // Aqui garantimos que só acessamos .role se profile existir.
-  // Usamos verificação explícita para evitar o erro "reading role of null"
-  const isAdmin = (profile && profile.role === 'admin') ? true : false;
-  const isProfissional = (profile && profile.role === 'professional') ? true : false;
+  // --- CORREÇÃO APLICADA ---
+  // Utilizei o operador ?. (Optional Chaining).
+  // Isso previne 100% o erro "Cannot read properties of null".
+  // Se profile for null, ele retorna undefined (falso) automaticamente.
+  const isAdmin = profile?.role === 'admin';
+  const isProfissional = profile?.role === 'professional';
 
   const value = {
     session,
