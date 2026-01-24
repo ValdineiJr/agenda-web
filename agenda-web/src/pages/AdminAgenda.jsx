@@ -204,6 +204,10 @@ function AdminAgenda() {
     setLoading(true);
     setError(null);
     
+    // --- SEGURANÇA ADICIONAL ---
+    // Se não tiver profile aqui, não executa para evitar erro de .role
+    if (!profile) return;
+
     const hoje = new Date();
     const inicioDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     inicioDoMes.setHours(0, 0, 0, 0);
@@ -229,6 +233,7 @@ function AdminAgenda() {
       .order('data_hora_inicio', { ascending: true });
     
     // Restrição de Perfil (Se não for Admin, vê só o seu)
+    // Aqui usava profile.role, agora protegido pelo if(!profile) acima
     if (profile.role !== 'admin') {
       query = query.eq('profissional_id', profile.id);
     }
@@ -326,8 +331,8 @@ function AdminAgenda() {
     // Preenche profissional automaticamente:
     // Se não for admin, é o próprio user.
     // Se FOR admin e tiver filtro selecionado, usa o filtro. Senão, vazio.
-    if (profile.role !== 'admin') {
-      setModalProfissionalId(profile.id);
+    if (profile?.role !== 'admin') {
+      setModalProfissionalId(profile?.id);
     } else {
       setModalProfissionalId(filtroProfissionalId || ''); 
     }
@@ -595,6 +600,25 @@ function AdminAgenda() {
   if (authLoading || (loading && !agendamentosAgrupados)) {
     return <div className="p-8 text-center">Carregando agenda...</div>;
   }
+  
+  // --- CORREÇÃO DE TELA BRANCA ---
+  // Se chegamos aqui, authLoading é false. Mas se profile ainda for null
+  // (por erro ou atraso), não podemos renderizar a tela que exige profile.role
+  if (!profile) {
+     return (
+       <div className="flex flex-col items-center justify-center p-10 gap-4 text-center">
+          <p className="text-red-600 font-bold">Não foi possível carregar seu perfil de usuário.</p>
+          <p className="text-sm text-gray-500">Tente recarregar a página ou faça login novamente.</p>
+          <button 
+             onClick={() => window.location.reload()}
+             className="bg-fuchsia-600 text-white px-4 py-2 rounded hover:bg-fuchsia-700 transition"
+          >
+             Recarregar Página
+          </button>
+       </div>
+     );
+  }
+
   if (error) {
     return <div className="p-8 text-center text-red-600">{error}</div>;
   }
@@ -613,15 +637,16 @@ function AdminAgenda() {
       
       {/* --- CABEÇALHO --- */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
+        {/* Aqui ocorria o erro se profile fosse null */}
         <h1 className="text-3xl font-bold text-gray-800">
-          {profile.role === 'admin' ? 'Agenda Geral' : 'Minha Agenda'}
+          {profile?.role === 'admin' ? 'Agenda Geral' : 'Minha Agenda'}
         </h1>
 
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
           
           {/* --- FILTRO DE PROFISSIONAL (Dropdown) --- */}
           {/* Só aparece se o usuário for ADMIN */}
-          {profile.role === 'admin' && (
+          {profile?.role === 'admin' && (
             <div className="relative">
                <select 
                  value={filtroProfissionalId} 
@@ -823,7 +848,7 @@ function AdminAgenda() {
               <div className="space-y-4">
                  
                  {/* Seção de Reagendamento (Visível apenas na Edição para Admin) */}
-                 {modalMode === 'edit' && profile.role === 'admin' && (
+                 {modalMode === 'edit' && profile?.role === 'admin' && (
                    <div className="bg-gray-100 p-4 rounded-lg border border-gray-200 mb-4">
                       <button 
                         type="button" 
@@ -874,7 +899,7 @@ function AdminAgenda() {
                       <select 
                         value={modalServicoId} 
                         onChange={e => setModalServicoId(e.target.value)} 
-                        disabled={profile.role !== 'admin'} 
+                        disabled={profile?.role !== 'admin'} 
                         className="input-modal" 
                         required
                       >
@@ -889,7 +914,7 @@ function AdminAgenda() {
                       <select 
                         value={modalProfissionalId} 
                         onChange={e => setModalProfissionalId(e.target.value)} 
-                        disabled={profile.role !== 'admin'} 
+                        disabled={profile?.role !== 'admin'} 
                         className="input-modal" 
                         required
                       >
@@ -908,7 +933,7 @@ function AdminAgenda() {
                      type="text" 
                      value={modalNome} 
                      onChange={e => setModalNome(e.target.value)} 
-                     disabled={profile.role !== 'admin'} 
+                     disabled={profile?.role !== 'admin'} 
                      className="input-modal" 
                      required 
                    />
@@ -919,7 +944,7 @@ function AdminAgenda() {
                      type="tel" 
                      value={modalTelefone} 
                      onChange={e => setModalTelefone(e.target.value)} 
-                     disabled={profile.role !== 'admin'} 
+                     disabled={profile?.role !== 'admin'} 
                      className="input-modal" 
                      required 
                    />
@@ -936,7 +961,7 @@ function AdminAgenda() {
                     </button>
                     
                     {/* Botão Salvar (Aparece para Novo ou se for Admin) */}
-                    {(modalMode === 'new' || profile.role === 'admin') && (
+                    {(modalMode === 'new' || profile?.role === 'admin') && (
                       <button 
                         type="submit" 
                         disabled={isSavingModal} 
