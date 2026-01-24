@@ -1,8 +1,8 @@
-import { useState } from 'react'; 
+import { useState, useEffect } from 'react'; 
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '/src/AuthContext.jsx'; 
 
-// --- ÍCONES SVG PERSONALIZADOS (Para não precisar instalar bibliotecas) ---
+// --- ÍCONES SVG PERSONALIZADOS ---
 const Icons = {
   Menu: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>,
   Close: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>,
@@ -18,7 +18,6 @@ const Icons = {
   Login: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>
 };
 
-// Componente de Link do Menu (Para padronizar e destacar o ativo)
 const MenuLink = ({ to, children, icon: Icon }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
@@ -43,10 +42,21 @@ const MenuLink = ({ to, children, icon: Icon }) => {
 function Layout() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
+  
+  // LÓGICA DE ABERTURA INTELIGENTE:
+  // Se for computador (> 768px), o menu começa ABERTO.
+  // Se for celular, começa FECHADO.
   const [menuAberto, setMenuAberto] = useState(false); 
+
+  useEffect(() => {
+    // Verifica o tamanho da tela ao carregar
+    if (window.innerWidth >= 768) {
+      setMenuAberto(true);
+    }
+  }, []);
+
   const whatsappLink = "https://wa.me/5519993562075";
 
-  // Logout Padrão
   const handleLogout = async () => {
     try {
       await signOut(); 
@@ -56,7 +66,6 @@ function Layout() {
     }
   };
 
-  // --- NOVA FUNÇÃO: LIMPEZA FORÇADA (SOS) ---
   const handleForceReset = () => {
     if (window.confirm("⚠️ ATENÇÃO: Isso vai limpar a memória do navegador e reiniciar o sistema.\n\nUse isso apenas se o sistema estiver travado ou não carregar.\n\nDeseja continuar?")) {
       console.warn("Reset forçado pelo usuário.");
@@ -75,6 +84,7 @@ function Layout() {
         flex flex-col text-white shadow-2xl
         bg-gradient-to-b from-fuchsia-900 to-purple-900 
         transition-all duration-300 ease-in-out
+        overflow-hidden /* <--- FIX: CORREÇÃO DO BUG VISUAL (Corta o conteúdo quando fecha) */
         
         ${menuAberto ? 'translate-x-0' : '-translate-x-full'} /* Mobile */
         
@@ -92,12 +102,11 @@ function Layout() {
           <Icons.Close />
         </button>
 
-        {/* Wrapper do Menu */}
+        {/* Wrapper do Menu (Conteúdo Interno) */}
         <div className="w-72 flex flex-col h-full">
           
-          {/* --- CABEÇALHO DO MENU (LOGO) --- */}
+          {/* --- CABEÇALHO --- */}
           <div className="flex flex-col items-center justify-center pt-8 pb-6 px-4 border-b border-white/10 bg-black/10">
-            {/* Container Branco do Logo */}
             <div className="w-20 h-20 bg-white rounded-2xl shadow-lg flex items-center justify-center p-2 mb-3 transform hover:scale-105 transition-transform duration-300">
               <img src="/logo-salao.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
@@ -107,7 +116,7 @@ function Layout() {
             </p>
           </div>
           
-          {/* --- NAVEGAÇÃO (Scrollável) --- */}
+          {/* --- NAVEGAÇÃO --- */}
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
             
             <MenuLink to="/" icon={Icons.CalendarAdd}>
@@ -150,7 +159,6 @@ function Layout() {
                 
                 <div className="my-4 border-t border-white/10"></div>
                 
-                {/* Botão de Logout Padrão */}
                 <button 
                   onClick={handleLogout} 
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-fuchsia-100 hover:bg-red-500/20 hover:text-red-100 transition-colors"
@@ -166,8 +174,7 @@ function Layout() {
             )}
           </nav>
 
-          {/* --- RODAPÉ DO MENU (BOTÃO SOS) --- */}
-          {/* Visível apenas se estiver logado, para ajudar a recepcionista */}
+          {/* --- RODAPÉ (SOS) --- */}
           {session && (
             <div className="p-4 bg-black/20 border-t border-white/10">
                <button 
@@ -196,7 +203,7 @@ function Layout() {
             
         <main className="flex-1 overflow-y-auto p-4 md:p-8 relative scroll-smooth">
           
-          {/* Botão Menu Desktop (Flutuante e Moderno) */}
+          {/* Botão Menu Desktop */}
           <button 
             onClick={() => setMenuAberto(!menuAberto)}
             className="hidden md:flex items-center justify-center w-10 h-10 mb-6 bg-white border border-gray-200 shadow-sm rounded-full text-gray-600 hover:text-fuchsia-700 hover:border-fuchsia-300 transition-all hover:shadow-md"
@@ -214,7 +221,6 @@ function Layout() {
             <Icons.Menu />
           </button>
 
-          {/* Conteúdo da Página */}
           <div className="animate-fade-in-up">
             <Outlet />
           </div>
