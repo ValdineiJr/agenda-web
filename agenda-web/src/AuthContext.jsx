@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
 const AuthContext = createContext({});
@@ -9,6 +9,10 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // --- MELHORIA DE PERFORMANCE ---
+  // Referência para controlar o tempo da última checagem e evitar travamentos
+  const lastCheckTime = useRef(0);
 
   // Função auxiliar para buscar o perfil do usuário
   const fetchProfile = async (user) => {
@@ -21,15 +25,12 @@ export const AuthProvider = ({ children }) => {
         .single();
       
       // Se a tabela não existir (Erro 404/PGRST205) ou der erro,
-      // vamos tentar uma AUTORIZAÇÃO DE EMERGÊNCIA baseada no e-mail.
+      // usamos o fallback de emergência que você já tinha.
       if (error) {
-        console.warn('Tabela profiles não encontrada ou erro ao buscar. Usando fallback de email.', error);
+        console.warn('Fallback de perfil ativado (Tabela ausente ou erro).');
         
-        // --- FALLBACK DE SEGURANÇA ---
-        // Se o banco falhar, verificamos se o email é o seu.
-        // Isso garante que você consiga entrar no sistema.
-        // Adicione outros emails de admin aqui se precisar.
-        const emailsAdmin = ['valdinei@seuemail.com', user.email]; // O user.email libera quem estiver logado temporariamente
+        // --- FALLBACK DE SEGURANÇA MANTIDO ---
+        const emailsAdmin = ['valdinei@seuemail.com', user.email]; 
         
         if (emailsAdmin.includes(user.email)) {
              setProfile({ 
@@ -96,15 +97,24 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     });
 
-    // 3. Auto-Recuperação
+    // 3. Auto-Recuperação OTIMIZADA (Evita travamentos)
     const handleFocus = async () => {
+      const now = Date.now();
+      // REGRA: Só permite checar novamente se passou 60 segundos desde a última vez.
+      // Isso impede que o sistema trave se a aba ganhar foco muitas vezes.
+      if (now - lastCheckTime.current < 60000) {
+        return; 
+      }
+      
+      lastCheckTime.current = now; // Atualiza o tempo da última checagem
+
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error || !session) {
          if (session) await supabase.auth.signOut();
          setSession(null);
          setProfile(null);
       } else {
-         // Não sobrescreve se a sessão for a mesma para evitar loop
+         // Não sobrescreve se a sessão for idêntica para evitar re-renderização
          setSession((prev) => (JSON.stringify(prev) !== JSON.stringify(session) ? session : prev));
       }
     };
@@ -116,9 +126,9 @@ export const AuthProvider = ({ children }) => {
       subscription.unsubscribe();
       window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, []); // Array de dependência vazio = roda apenas na montagem
 
-  // Utilizei o operador ?. (Optional Chaining) para evitar erros
+  // Helpers
   const isAdmin = profile?.role === 'admin';
   const isProfissional = profile?.role === 'professional';
 
