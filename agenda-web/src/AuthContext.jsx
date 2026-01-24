@@ -10,9 +10,29 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // --- MELHORIA DE PERFORMANCE ---
-  // Referência para controlar o tempo da última checagem e evitar travamentos
+  // --- CONFIGURAÇÃO DE TEMPO (NOVA FUNCIONALIDADE) ---
+  // Tempo em milissegundos para derrubar a sessão e limpar cache por inatividade.
+  // 45 minutos = 45 * 60 * 1000
+  const TEMPO_INATIVIDADE = 45 * 60 * 1000; 
+
+  // Referência para controlar o tempo da última checagem de foco (Throttle)
   const lastCheckTime = useRef(0);
+
+  // --- FUNÇÃO DE LIMPEZA TOTAL (Logout Forçado) ---
+  // Esta função limpa o cache, storage e redireciona, prevenindo travamentos por memória cheia.
+  const realizarLimpezaTotal = async () => {
+    console.warn("Inatividade detectada ou erro crítico: Limpando sistema...");
+    try {
+        await supabase.auth.signOut();
+    } catch (e) {
+        console.error("Erro ao deslogar supabase (ignorado):", e);
+    }
+    // Limpa tudo que pode estar "sujando" a memória do navegador
+    localStorage.clear();
+    sessionStorage.clear();
+    // Força o recarregamento real da página indo para o login
+    window.location.href = '/login';
+  };
 
   // Função auxiliar para buscar o perfil do usuário
   const fetchProfile = async (user) => {
@@ -54,6 +74,30 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let mounted = true;
+    let inatividadeTimer; // Variável para controlar o timer de inatividade
+
+    // --- LÓGICA DO MONITOR DE INATIVIDADE ---
+    const resetarTimerInatividade = () => {
+        if (!mounted) return;
+        
+        // Limpa o timer anterior (o utilizador mexeu-se)
+        if (inatividadeTimer) clearTimeout(inatividadeTimer);
+        
+        // Cria um novo timer para limpar tudo daqui a 45 min
+        inatividadeTimer = setTimeout(() => {
+            realizarLimpezaTotal();
+        }, TEMPO_INATIVIDADE);
+    };
+
+    // Adiciona "ouvintes" para saber se o utilizador está ativo
+    window.addEventListener('mousemove', resetarTimerInatividade);
+    window.addEventListener('keydown', resetarTimerInatividade);
+    window.addEventListener('click', resetarTimerInatividade);
+    window.addEventListener('scroll', resetarTimerInatividade);
+    window.addEventListener('touchstart', resetarTimerInatividade);
+
+    // Inicia o timer assim que a tela carrega
+    resetarTimerInatividade();
 
     // 1. Verificação Inicial da Sessão
     const initializeAuth = async () => {
@@ -70,10 +114,9 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error("Erro na inicialização da sessão:", error);
+        // Se der erro grave de token, já limpa tudo para evitar tela branca
         if (error.message && (error.message.includes('refresh_token_not_found') || error.status === 400)) {
-           await supabase.auth.signOut();
-           setSession(null);
-           setProfile(null);
+           await realizarLimpezaTotal();
         }
       } finally {
         if (mounted) setLoading(false);
@@ -83,13 +126,21 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
 
     // 2. Escutar mudanças de Login/Logout
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
+      // Se houver logout explícito ou utilizador deletado, limpa estados
+      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+         setSession(null);
+         setProfile(null);
+         setLoading(false);
+         return; 
+      }
+
       setSession(session);
       
       if (session?.user) {
-        // Se já temos um perfil carregado na memória, não busca de novo para ganhar performance
+        // Se já temos um perfil carregado, não busca de novo (Performance)
         if (!profile) await fetchProfile(session.user);
       } else {
         setProfile(null);
@@ -97,11 +148,11 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     });
 
-    // 3. Auto-Recuperação OTIMIZADA (Evita travamentos)
+    // 3. Auto-Recuperação OTIMIZADA (Throttle de 60s mantido)
     const handleFocus = async () => {
       const now = Date.now();
-      // REGRA: Só permite checar novamente se passou 60 segundos desde a última vez.
-      // Isso impede que o sistema trave se a aba ganhar foco muitas vezes.
+      
+      // REGRA: Só permite checar novamente se passou 60 segundos.
       if (now - lastCheckTime.current < 60000) {
         return; 
       }
@@ -110,11 +161,12 @@ export const AuthProvider = ({ children }) => {
 
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error || !session) {
-         if (session) await supabase.auth.signOut();
+         // Se perdeu a sessão, faz a limpeza total
+         if (session) await realizarLimpezaTotal();
          setSession(null);
          setProfile(null);
       } else {
-         // Não sobrescreve se a sessão for idêntica para evitar re-renderização
+         // Não sobrescreve se a sessão for idêntica
          setSession((prev) => (JSON.stringify(prev) !== JSON.stringify(session) ? session : prev));
       }
     };
@@ -125,8 +177,16 @@ export const AuthProvider = ({ children }) => {
       mounted = false;
       subscription.unsubscribe();
       window.removeEventListener('focus', handleFocus);
+      
+      // Remove os ouvintes de inatividade ao sair
+      window.removeEventListener('mousemove', resetarTimerInatividade);
+      window.removeEventListener('keydown', resetarTimerInatividade);
+      window.removeEventListener('click', resetarTimerInatividade);
+      window.removeEventListener('scroll', resetarTimerInatividade);
+      window.removeEventListener('touchstart', resetarTimerInatividade);
+      if (inatividadeTimer) clearTimeout(inatividadeTimer);
     };
-  }, []); // Array de dependência vazio = roda apenas na montagem
+  }, []); 
 
   // Helpers
   const isAdmin = profile?.role === 'admin';
@@ -138,7 +198,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAdmin,
     isProfissional,
-    signOut: () => supabase.auth.signOut(),
+    // Substitui o signOut normal pela Limpeza Total para garantir que nada fique na memória
+    signOut: realizarLimpezaTotal, 
   };
 
   return (
