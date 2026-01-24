@@ -3,10 +3,10 @@ import { useAuth } from './AuthContext';
 import { useState, useEffect } from 'react';
 
 function ProtectedRoute() {
-  const { session, loading } = useAuth(); 
+  const { session, profile, loading } = useAuth(); 
   const [demorou, setDemorou] = useState(false);
 
-  // Timer para mostrar botão de socorro se travar
+  // Timer de segurança
   useEffect(() => {
     let timer;
     if (loading) {
@@ -15,12 +15,10 @@ function ProtectedRoute() {
     return () => clearTimeout(timer);
   }, [loading]);
 
-  // Função de Limpeza Forçada (Funcionalidade Original Mantida)
   const forcarReinico = () => {
-    console.log("Limpando cache local e forçando reload...");
-    localStorage.clear(); // Apaga tokens locais
-    sessionStorage.clear(); // Apaga sessão
-    window.location.href = '/login'; // Redireciona via navegador (hard navigation)
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = '/login';
   };
 
   if (loading) {
@@ -44,7 +42,18 @@ function ProtectedRoute() {
     ); 
   }
 
+  // --- CORREÇÃO DA TELA BRANCA ---
+  // Se não tem sessão, vai pro login.
   if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // NOVA TRAVA DE SEGURANÇA:
+  // Se tem sessão, mas o perfil falhou em carregar (é null), 
+  // não podemos deixar carregar o Layout, senão da TELA BRANCA.
+  // Mandamos volta para o login para tentar buscar o perfil de novo.
+  if (!profile) {
+    console.warn("Sessão ativa mas perfil não encontrado. Redirecionando...");
     return <Navigate to="/login" replace />;
   }
 
