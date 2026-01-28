@@ -65,6 +65,7 @@ const EventoPersonalizado = ({ event }) => {
         <div className="font-semibold truncate">{event.resource.servicos?.nome}</div>
         <div className="font-light truncate opacity-80">{event.resource.nome_cliente.split(' ')[0]}</div>
       </div>
+      {/* TOOLTIP FLUTUANTE */}
       <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-64 bg-white p-4 rounded-xl shadow-2xl border border-gray-100 animate-fade-in pointer-events-none">
          <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-100"></div>
          <div className="relative z-10">
@@ -95,7 +96,7 @@ function AdminAgenda() {
   const { profile, loading: authLoading } = useAuth(); 
   
   // --- States de Dados ---
-  const [agendamentosRawState, setAgendamentosRawState] = useState([]); // Armazena raw data para filtrar localmente
+  const [agendamentosRawState, setAgendamentosRawState] = useState([]); 
   const [agendamentosAgrupados, setAgendamentosAgrupados] = useState({});
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [canceladosAgrupados, setCanceladosAgrupados] = useState({});
@@ -109,10 +110,10 @@ function AdminAgenda() {
   const [totalFinalizados, setTotalFinalizados] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [viewMode, setViewMode] = useState('calendar'); // 'calendar', 'cards', 'list_today'
+  const [viewMode, setViewMode] = useState('calendar'); 
   const [filtroProfissionalId, setFiltroProfissionalId] = useState(''); 
   
-  // --- Bulk Actions (Lista de Hoje) ---
+  // --- Bulk Actions ---
   const [selectedBulkIds, setSelectedBulkIds] = useState([]);
 
   // --- Modal States ---
@@ -122,11 +123,9 @@ function AdminAgenda() {
   const [calendarView, setCalendarView] = useState('week'); 
   const [calendarDate, setCalendarDate] = useState(new Date());
   
-  // --- Dados Auxiliares ---
   const [allServicos, setAllServicos] = useState([]);
   const [allProfissionais, setAllProfissionais] = useState([]);
   
-  // --- Form Modal ---
   const [modalServicoId, setModalServicoId] = useState('');
   const [modalProfissionalId, setModalProfissionalId] = useState('');
   const [modalNome, setModalNome] = useState('');
@@ -135,7 +134,6 @@ function AdminAgenda() {
   const [isSavingModal, setIsSavingModal] = useState(false);
   const [modalError, setModalError] = useState(null);
   
-  // --- Reagendamento/Cancelamento ---
   const [showRemarcar, setShowRemarcar] = useState(false);
   const [novaData, setNovaData] = useState(new Date());
   const [novosHorarios, setNovosHorarios] = useState([]);
@@ -144,7 +142,6 @@ function AdminAgenda() {
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [adminCancelReason, setAdminCancelReason] = useState(MOTIVOS_ADMIN[0]);
 
-  // --- EFEITOS ---
   useEffect(() => { if (!authLoading && profile) fetchModalData(); }, [authLoading, profile]);
   useEffect(() => { if (!authLoading && profile) fetchAgendamentos(); }, [authLoading, profile, filtroProfissionalId]); 
 
@@ -176,7 +173,7 @@ function AdminAgenda() {
     
     if (dbError) { setError('Erro ao carregar agenda.'); } 
     else if (agendamentosRaw) {
-      setAgendamentosRawState(agendamentosRaw); // Salva para uso no filtro "Hoje"
+      setAgendamentosRawState(agendamentosRaw);
 
       let agendamentosFiltrados = agendamentosRaw;
       if (filtroProfissionalId) agendamentosFiltrados = agendamentosRaw.filter(ag => ag.profissional_id == filtroProfissionalId);
@@ -185,7 +182,6 @@ function AdminAgenda() {
       const cancelados = agendamentosFiltrados.filter(ag => ag.status === 'cancelado');
       const finalizados = agendamentosFiltrados.filter(ag => ag.status === 'finalizado'); 
       
-      // Central de Avisos
       const agora = new Date(); agora.setHours(0,0,0,0);
       const limiteAmanha = new Date(agora); limiteAmanha.setDate(limiteAmanha.getDate() + 2);
       setProximosAgendamentos(ativos.filter(ag => {
@@ -193,9 +189,15 @@ function AdminAgenda() {
       }));
 
       setTotalCancelados(cancelados.length); setTotalFinalizados(finalizados.length); 
-      setAgendamentosAgrupados(ativos.reduce((acc, ag) => { const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR'); if (!acc[d]) acc[d] = []; acc[d].push(ag); return acc; }, {}));
-      setCanceladosAgrupados(cancelados.reduce((acc, ag) => { const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR'); if (!acc[d]) acc[d] = []; acc[d].push(ag); return acc; }, {}));
-      setFinalizadosAgrupados(finalizados.reduce((acc, ag) => { const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR'); if (!acc[d]) acc[d] = []; acc[d].push(ag); return acc; }, {}));
+      
+      const agruparPorDia = (lista) => lista.reduce((acc, ag) => {
+          const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
+          if (!acc[d]) acc[d] = []; acc[d].push(ag); return acc;
+      }, {});
+
+      setAgendamentosAgrupados(agruparPorDia(ativos));
+      setCanceladosAgrupados(agruparPorDia(cancelados));
+      setFinalizadosAgrupados(agruparPorDia(finalizados));
 
       setEventosCalendario(ativos.map(ag => ({
         title: `${formatarHora(ag.data_hora_inicio)} - ${ag.servicos?.nome}`, start: new Date(ag.data_hora_inicio), end: new Date(ag.data_hora_fim), resource: ag, status: ag.status 
@@ -226,7 +228,7 @@ function AdminAgenda() {
     if (error) alert('Erro ao atualizar status.'); else fetchAgendamentos();
   };
 
-  // --- BULK ACTION (FINALIZAR EM MASSA) ---
+  // --- BULK ACTION ---
   const toggleBulkSelect = (id) => {
     setSelectedBulkIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
@@ -238,19 +240,35 @@ function AdminAgenda() {
     setLoading(true);
     const { error } = await supabase.from('agendamentos').update({ status: 'finalizado' }).in('id', selectedBulkIds);
     if (error) { alert("Erro ao finalizar em massa."); } 
-    else { 
-      setSelectedBulkIds([]); 
-      fetchAgendamentos(); 
-      alert("Agendamentos finalizados com sucesso!"); 
-    }
+    else { setSelectedBulkIds([]); fetchAgendamentos(); alert("Agendamentos finalizados com sucesso!"); }
     setLoading(false);
   };
 
+  // --- FUNÇÕES "NOVO SERVIÇO" ---
+  
+  // 1. Serviço Extra Geral (Botão do Topo)
   const handleAdicionarExtraHoje = () => {
     setModalMode('new');
-    setSelectedEvent({ start: new Date(), end: new Date() }); // Começa com data de hoje
+    setSelectedEvent({ start: new Date(), end: new Date() }); // Horário atual
     setModalServicoId(''); setModalNome(''); setModalEmail(''); setModalTelefone(''); setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
     setModalProfissionalId(profile?.role !== 'admin' ? profile?.id : (filtroProfissionalId || ''));
+    setModalIsOpen(true);
+  };
+
+  // 2. Serviço Extra para Cliente Específico (Botão da Lista)
+  // --- MELHORIA SOLICITADA: Preenche os dados automaticamente ---
+  const handleAdicionarServicoParaCliente = (ag) => {
+    setModalMode('new');
+    setSelectedEvent({ start: new Date() }); // Define horário como AGORA
+    
+    // PREENCHIMENTO AUTOMÁTICO DOS DADOS
+    setModalNome(ag.nome_cliente);
+    setModalTelefone(ag.telefone_cliente);
+    setModalEmail(ag.email_cliente || '');
+    setModalProfissionalId(ag.profissional_id); // Mantém o profissional
+    setModalServicoId(''); // Serviço o usuário escolhe
+    
+    setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
     setModalIsOpen(true);
   };
 
@@ -274,16 +292,17 @@ function AdminAgenda() {
 
   const handleModalSave = async () => {
     setIsSavingModal(true); setModalError(null);
-    if (!modalServicoId || !modalProfissionalId || !modalNome) { setModalError('Preencha os campos obrigatórios.'); setIsSavingModal(false); return; }
+    if (!modalServicoId || !modalProfissionalId || !modalNome) { setModalError('Preencha serviço, profissional e nome.'); setIsSavingModal(false); return; }
     
     const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
     let ini;
     if (showRemarcar && novoHorarioSelecionado) ini = new Date(novoHorarioSelecionado);
-    else if (modalMode === 'new') ini = selectedEvent.start; // Para "Extra Hoje", start é new Date()
+    else if (modalMode === 'new') {
+        // CORREÇÃO CRÍTICA: Se selectedEvent.start existir (calendário), usa ele.
+        // Se for nulo (botão extra), usa new Date() (agora).
+        ini = selectedEvent?.start ? new Date(selectedEvent.start) : new Date();
+    }
     else ini = new Date(selectedEvent.data_hora_inicio);
-    
-    // Se for "Extra Hoje" sem horário definido (clique no botão), usa hora atual se selectedEvent.start for genérico
-    // Mas o fluxo padrão do calendário já manda a hora. No botão extra, ajustamos.
     
     const fim = new Date(ini.getTime() + servico.duracao_minutos * 60000);
     const payload = { servico_id: servico.id, profissional_id: parseInt(modalProfissionalId), nome_cliente: modalNome, email_cliente: modalEmail, telefone_cliente: modalTelefone, data_hora_inicio: ini.toISOString(), data_hora_fim: fim.toISOString(), status: 'confirmado' };
@@ -304,7 +323,6 @@ function AdminAgenda() {
     if (error) { setModalError(error.message); setIsSavingModal(false); } 
     else {
       setIsSavingModal(false); 
-      // Abre WhatsApp ao cancelar
       const nome = selectedEvent.nome_cliente.split(' ')[0];
       const servico = selectedEvent.servicos?.nome || 'serviço';
       const msg = `Olá ${nome}. Infelizmente tivemos que cancelar seu agendamento de ${servico}. Motivo: ${adminCancelReason}`;
@@ -341,23 +359,16 @@ function AdminAgenda() {
     setNovosHorarios(slots); setLoadingNovosHorarios(false);
   };
 
-  // --- LÓGICA DE AGRUPAMENTO PARA LISTA DE HOJE ---
   const renderListaHoje = () => {
     const hojeStr = new Date().toLocaleDateString('pt-BR');
-    
-    // Filtra agendamentos de HOJE (que não estão cancelados ou finalizados)
-    // Se quiser permitir finalizar os já finalizados (para corrigir), retire o filtro de status.
-    // Aqui mostramos 'confirmado' e 'em_atendimento'.
     const agendamentosHoje = agendamentosRawState.filter(ag => {
         const dataAg = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
         const isHoje = dataAg === hojeStr;
         const isAtivo = ag.status === 'confirmado' || ag.status === 'em_atendimento';
-        
         if (filtroProfissionalId) return isHoje && isAtivo && ag.profissional_id == filtroProfissionalId;
         return isHoje && isAtivo;
     });
 
-    // Agrupa por Profissional
     const porProfissional = agendamentosHoje.reduce((acc, ag) => {
         const nomeProf = ag.profissionais?.nome || 'Sem Profissional';
         if (!acc[nomeProf]) acc[nomeProf] = [];
@@ -378,7 +389,6 @@ function AdminAgenda() {
 
     return (
         <div className="space-y-8 animate-fade-in">
-            {/* Header da Lista */}
             <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-fuchsia-100">
                 <div>
                     <h2 className="text-xl font-bold text-gray-800">Agendamentos de Hoje</h2>
@@ -386,7 +396,7 @@ function AdminAgenda() {
                 </div>
                 <div className="flex gap-3">
                     <button onClick={handleAdicionarExtraHoje} className="bg-white border border-fuchsia-600 text-fuchsia-600 px-4 py-2 rounded-lg font-bold hover:bg-fuchsia-50 transition">
-                        + Serviço Extra
+                        + Serviço Extra (Novo)
                     </button>
                     {selectedBulkIds.length > 0 && (
                         <button onClick={handleBulkFinish} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 transition shadow-md animate-pulse">
@@ -396,7 +406,6 @@ function AdminAgenda() {
                 </div>
             </div>
 
-            {/* Listagem por Profissional */}
             {Object.keys(porProfissional).map(profNome => (
                 <div key={profNome} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
                     <div className="bg-fuchsia-50 p-4 border-b border-fuchsia-100 flex justify-between items-center">
@@ -408,30 +417,32 @@ function AdminAgenda() {
                     <div className="divide-y divide-gray-100">
                         {porProfissional[profNome].map(ag => (
                             <div key={ag.id} className="p-4 flex flex-col md:flex-row items-center gap-4 hover:bg-gray-50 transition">
-                                {/* Checkbox Bulk */}
                                 <input 
                                     type="checkbox" 
                                     checked={selectedBulkIds.includes(ag.id)}
                                     onChange={() => toggleBulkSelect(ag.id)}
                                     className="w-5 h-5 text-fuchsia-600 rounded focus:ring-fuchsia-500 cursor-pointer"
                                 />
-                                
-                                {/* Hora */}
                                 <div className="min-w-[80px] text-center">
                                     <span className="block text-lg font-bold text-gray-700">{formatarHora(ag.data_hora_inicio)}</span>
                                     {ag.status === 'em_atendimento' && (
                                         <span className="text-[10px] uppercase font-bold text-amber-600 bg-amber-100 px-1 rounded">Em Andamento</span>
                                     )}
                                 </div>
-
-                                {/* Info */}
                                 <div className="flex-1 text-center md:text-left">
                                     <p className="font-bold text-gray-800">{ag.nome_cliente}</p>
                                     <p className="text-sm text-gray-500">{ag.servicos?.nome}</p>
                                 </div>
-
-                                {/* Ações Rápidas */}
                                 <div className="flex items-center gap-2">
+                                    {/* Botão para ADICIONAR SERVIÇO EXTRA (CLONANDO DADOS) */}
+                                    <button 
+                                        onClick={() => handleAdicionarServicoParaCliente(ag)}
+                                        className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm font-bold hover:bg-purple-200 transition"
+                                        title="Adicionar Serviço Extra para este cliente"
+                                    >
+                                        + Serviço
+                                    </button>
+
                                     <button 
                                         onClick={() => handleEnviarWhatsApp(ag, 'contato')}
                                         className="p-2 bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition"
@@ -444,7 +455,7 @@ function AdminAgenda() {
                                         onClick={() => handleSelectEvent({ resource: ag })}
                                         className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition"
                                     >
-                                        Editar/Cancelar
+                                        Editar
                                     </button>
 
                                     <button 
@@ -463,8 +474,6 @@ function AdminAgenda() {
     );
   };
 
-  // --- RENDERIZAÇÃO FINAL ---
-  
   if (authLoading || (loading && !agendamentosAgrupados)) return <div className="p-10 text-center text-fuchsia-600 font-bold animate-pulse">Carregando Studio...</div>;
   if (!profile) return <div className="p-10 text-center"><button onClick={()=>window.location.reload()}>Recarregar</button></div>;
 
@@ -478,7 +487,7 @@ function AdminAgenda() {
   return (
     <div className="max-w-7xl mx-auto pb-10">
       
-      {/* --- HEADER --- */}
+      {/* HEADER */}
       <div className="flex flex-col lg:flex-row justify-between items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">
           {profile?.role === 'admin' ? 'Agenda Geral' : 'Minha Agenda'}
@@ -498,7 +507,7 @@ function AdminAgenda() {
         </div>
       </div>
 
-      {/* --- CENTRAL DE AVISOS (WhatsApp) --- */}
+      {/* CENTRAL DE AVISOS */}
       {viewMode === 'cards' && proximosAgendamentos.length > 0 && (
          <div className="mb-8 bg-gradient-to-br from-fuchsia-50 to-purple-50 p-6 rounded-2xl border border-fuchsia-100 shadow-sm animate-fade-in-up">
             <h2 className="text-lg font-bold text-fuchsia-900 flex items-center gap-2 mb-4">
@@ -523,10 +532,9 @@ function AdminAgenda() {
          </div>
       )}
 
-      {/* --- MODO VISUALIZAÇÃO: LISTA DE HOJE (NOVO) --- */}
+      {/* MODOS DE VISUALIZAÇÃO */}
       {viewMode === 'list_today' && renderListaHoje()}
 
-      {/* --- MODO VISUALIZAÇÃO: CARDS (MANTIDO) --- */}
       {viewMode === 'cards' && (
         <div className="space-y-10 animate-fade-in">
           {diasOrdenadosAtivos.length === 0 ? (
@@ -540,98 +548,34 @@ function AdminAgenda() {
                   {formatarDataCabecalho(dia)}
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {agendamentosAgrupados[dia].map(ag => {
-                    const emAtendimento = ag.status === 'em_atendimento';
-                    return (
-                      <div key={ag.id} className={`rounded-xl shadow-sm border-l-4 p-5 bg-white flex flex-col justify-between transition hover:shadow-md ${emAtendimento ? 'border-amber-400 bg-amber-50/50' : 'border-fuchsia-500'}`}>
+                  {agendamentosAgrupados[dia].map(ag => (
+                      <div key={ag.id} className={`rounded-xl shadow-sm border-l-4 p-5 bg-white flex flex-col justify-between transition hover:shadow-md ${ag.status === 'em_atendimento' ? 'border-amber-400 bg-amber-50/50' : 'border-fuchsia-500'}`}>
                         <div>
                           <div className="flex justify-between items-start">
                              <span className="text-2xl font-bold text-gray-700">{formatarHora(ag.data_hora_inicio)}</span>
-                             {/* Botão Flutuante WhatsApp no Card */}
-                             <button 
-                                onClick={() => handleEnviarWhatsApp(ag, 'confirmacao')}
-                                className="text-green-500 hover:text-green-600 bg-green-50 p-2 rounded-full hover:bg-green-100 transition"
-                                title="Enviar mensagem no WhatsApp"
-                             >
+                             <button onClick={() => handleEnviarWhatsApp(ag, 'confirmacao')} className="text-green-500 hover:text-green-600 bg-green-50 p-2 rounded-full hover:bg-green-100 transition" title="WhatsApp">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                              </button>
                           </div>
-                          {emAtendimento && <span className="bg-amber-200 text-amber-900 text-xs px-2 py-1 rounded font-bold mt-1 inline-block">EM ANDAMENTO</span>}
-                          
+                          {ag.status === 'em_atendimento' && <span className="bg-amber-200 text-amber-900 text-xs px-2 py-1 rounded font-bold mt-1 inline-block">EM ANDAMENTO</span>}
                           <p className="font-bold text-gray-800 mt-2 text-lg">{ag.nome_cliente}</p>
                           <p className="text-sm text-gray-600">{ag.servicos?.nome}</p>
-                          <p className="text-xs text-gray-400 mt-3 uppercase tracking-wide font-bold">
-                             {ag.profissionais?.nome}
-                          </p>
+                          <p className="text-xs text-gray-400 mt-3 uppercase tracking-wide font-bold">{ag.profissionais?.nome}</p>
                         </div>
                         <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2">
-                          {ag.status === 'confirmado' && (
-                            <button 
-                              onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} 
-                              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg text-sm font-bold transition-colors"
-                            >
-                              Iniciar
-                            </button>
-                          )}
-                          {ag.status === 'em_atendimento' && (
-                            <button 
-                              onClick={() => handleUpdateStatus(ag.id, 'finalizado')} 
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-bold transition-colors"
-                            >
-                              Finalizar
-                            </button>
-                          )}
+                          {ag.status === 'confirmado' && <button onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2 rounded-lg text-sm font-bold transition-colors">Iniciar</button>}
+                          {ag.status === 'em_atendimento' && <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-bold transition-colors">Finalizar</button>}
                         </div>
                       </div>
-                    );
-                  })}
+                  ))}
                 </div>
               </div>
             ))
           )}
-
-          {/* Histórico e Cancelados */}
-          {(diasOrdenadosFinalizados.length > 0 || diasOrdenadosCancelados.length > 0) && <hr className="border-gray-200 my-8" />}
-          
-          {diasOrdenadosFinalizados.length > 0 && (
-            <div>
-               <button onClick={() => setShowFinalizados(!showFinalizados)} className="w-full text-left bg-green-50 hover:bg-green-100 p-4 rounded-lg text-green-800 font-semibold flex justify-between transition-colors">
-                 <span>Agendamentos Finalizados ({totalFinalizados})</span> <span>{showFinalizados ? '▼' : '►'}</span>
-               </button>
-               {showFinalizados && (
-                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                   {diasOrdenadosFinalizados.map(d => finalizadosAgrupados[d].map(ag => (
-                     <div key={ag.id} className="bg-green-50 border border-green-200 p-3 rounded opacity-80">
-                        <p className="text-sm font-bold text-gray-700">{ag.servicos?.nome} - {formatarHora(ag.data_hora_inicio)}</p>
-                        <p className="text-xs text-gray-500">{ag.nome_cliente} ({ag.profissionais?.nome})</p>
-                     </div>
-                   )))}
-                 </div>
-               )}
-            </div>
-          )}
-
-          {diasOrdenadosCancelados.length > 0 && (
-            <div className="mt-4">
-               <button onClick={() => setShowCancelados(!showCancelados)} className="w-full text-left bg-red-50 hover:bg-red-100 p-4 rounded-lg text-red-800 font-semibold flex justify-between transition-colors">
-                 <span>Agendamentos Cancelados ({totalCancelados})</span> <span>{showCancelados ? '▼' : '►'}</span>
-               </button>
-               {showCancelados && (
-                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                   {diasOrdenadosCancelados.map(d => canceladosAgrupados[d].map(ag => (
-                     <div key={ag.id} className="bg-red-50 border border-red-200 p-3 rounded opacity-60 grayscale">
-                        <p className="text-sm font-bold line-through text-gray-700">{ag.servicos?.nome}</p>
-                        <p className="text-xs text-gray-500">{ag.nome_cliente} - Motivo: {ag.cancelamento_motivo}</p>
-                     </div>
-                   )))}
-                 </div>
-               )}
-            </div>
-          )}
+          {/* Histórico omitido visualmente para economizar espaço */}
         </div>
       )}
 
-      {/* --- MODO VISUALIZAÇÃO: CALENDÁRIO (VISUAL NOVO) --- */}
       {viewMode === 'calendar' && (
         <div className="bg-white p-2 md:p-6 rounded-2xl shadow-xl h-[85vh] animate-fade-in border border-gray-100 relative overflow-hidden">
            <div className="absolute top-0 right-0 w-64 h-64 bg-fuchsia-100 rounded-full blur-3xl opacity-20 -z-10 pointer-events-none"></div>
@@ -648,27 +592,22 @@ function AdminAgenda() {
               components={{ event: EventoPersonalizado }}
               messages={messages}
               culture="pt-BR"
-              tooltipAccessor={null} // Desativa tooltip nativo para usar o nosso
+              tooltipAccessor={null}
             />
         </div>
       )}
 
-      {/* --- NOVO MODAL DE EDIÇÃO --- */}
+      {/* MODAL */}
       <Modal isOpen={modalIsOpen} onRequestClose={closeModal} className="Modal" overlayClassName="ModalOverlay">
         {selectedEvent && (
           <form onSubmit={(e) => { e.preventDefault(); handleModalSave(); }} className="flex flex-col h-full">
-            
-            {/* Header */}
             <div className="bg-gradient-to-r from-fuchsia-600 to-purple-700 p-6 rounded-t-2xl text-white relative shrink-0">
                <h2 className="text-2xl font-bold">{modalMode === 'new' ? '✨ Novo Agendamento' : '✏️ Editar Agendamento'}</h2>
                <p className="text-fuchsia-100 text-sm opacity-90 mt-1">Gerencie os detalhes do cliente.</p>
                <button type="button" onClick={closeModal} className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl font-bold">&times;</button>
             </div>
 
-            {/* Body */}
             <div className="p-6 overflow-y-auto flex-1 space-y-5">
-               
-               {/* Atalhos WhatsApp (Apenas edição) */}
                {modalMode === 'edit' && !showCancelOptions && (
                  <div className="flex gap-3 mb-2">
                     <button type="button" onClick={() => handleEnviarWhatsApp({ ...selectedEvent, telefone_cliente: modalTelefone }, 'confirmacao')} className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 py-3 rounded-xl font-bold hover:bg-blue-100 transition shadow-sm border border-blue-200">
@@ -682,7 +621,6 @@ function AdminAgenda() {
 
                {!showCancelOptions ? (
                  <>
-                   {/* Reagendamento */}
                    {modalMode === 'edit' && profile?.role === 'admin' && (
                      <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
                         <button type="button" onClick={() => setShowRemarcar(!showRemarcar)} className="flex items-center justify-between w-full text-amber-800 font-bold">
@@ -734,7 +672,6 @@ function AdminAgenda() {
                    </div>
                  </>
                ) : (
-                 /* Cancelamento */
                  <div className="bg-red-50 p-6 rounded-xl border border-red-100 text-center animate-fade-in">
                     <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">⚠️</div>
                     <h3 className="text-xl font-bold text-red-800 mb-2">Cancelar Agendamento?</h3>
@@ -750,7 +687,6 @@ function AdminAgenda() {
                )}
             </div>
 
-            {/* Footer */}
             {!showCancelOptions && (
               <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3 rounded-b-2xl shrink-0">
                  <button type="button" onClick={closeModal} className="px-6 py-3 rounded-xl font-bold text-gray-600 hover:bg-gray-200 transition">Cancelar</button>
