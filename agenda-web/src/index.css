@@ -9,7 +9,6 @@ html, body, #root {
 
 /* =========================================
    1. CALENDÁRIO DO CLIENTE (Agendar.jsx)
-   Mantido do seu arquivo original
    ========================================= */
 
 /* Container Principal */
@@ -88,7 +87,7 @@ html, body, #root {
 
 /* =========================================
    2. AGENDA ADMINISTRATIVA (AdminAgenda.jsx)
-   Atualizado para o visual Moderno & Vibrante
+   Moderno & Com suporte a Tooltip (Hover)
    ========================================= */
 
 /* Container Geral */
@@ -123,7 +122,8 @@ html, body, #root {
 
 /* Células e Grade */
 .rbc-month-view {
-  @apply rounded-xl border-none shadow-lg bg-white overflow-hidden;
+  @apply rounded-xl border-none shadow-lg bg-white;
+  /* overflow: hidden removido para permitir tooltip */
 }
 .rbc-day-bg {
   @apply border-l border-gray-50;
@@ -143,18 +143,29 @@ html, body, #root {
   @apply text-fuchsia-600 font-extrabold text-lg;
 }
 
-/* Eventos (Os cards coloridos) */
+/* --- TRUQUE PARA O TOOLTIP FUNCIONAR (Sobrescrevendo padrão da biblioteca) --- */
+/* Isso permite que o card flutue por cima dos outros dias sem ser cortado */
+
 .rbc-event {
   @apply bg-transparent p-0 border-none outline-none;
+  overflow: visible !important; /* CRUCIAL: Deixa o tooltip sair da caixinha */
 }
-/* Remove o foco padrão azul */
+
+.rbc-row-segment, 
+.rbc-month-row, 
+.rbc-row-content {
+  overflow: visible !important; /* Garante que a linha não corte o conteúdo */
+  z-index: auto !important;
+}
+
+/* Remove o foco padrão azul feio */
 .rbc-event:focus {
   outline: none;
 }
 
 
 /* =========================================
-   3. MODAL (NOVO VISUAL VIDRO/GLASS)
+   3. MODAL (VISUAL VIDRO/GLASS)
    ========================================= */
 
 .ModalOverlay {
@@ -181,7 +192,8 @@ html, body, #root {
   outline: none;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   max-height: 90vh;
-  overflow-y: auto;
+  overflow-y: auto; /* Permite rolar se o modal for alto */
+  overflow-x: visible; /* Tenta evitar cortes laterais */
   animation: modalPop 0.3s ease-out forwards;
 }
 
@@ -209,7 +221,6 @@ html, body, #root {
 
 /* =========================================
    4. ANIMAÇÕES GERAIS
-   Mantidas do seu arquivo original
    ========================================= */
 
 @keyframes logo-spin {
@@ -242,6 +253,10 @@ html, body, #root {
   animation-delay: 4s;
 }
 
+/* Utilitário de Z-Index alto */
 .z-10 {
   z-index: 10;
+}
+.z-50 {
+  z-index: 50;
 }

@@ -49,28 +49,34 @@ function formatarHora(dataISO) {
 }
 
 // =========================================================
-//    COMPONENTE DE EVENTO (CALENDÁRIO)
+//    NOVO: COMPONENTE DE EVENTO COM TOOLTIP (HOVER)
 // =========================================================
 const EventoPersonalizado = ({ event }) => {
   const isEmAtendimento = event.resource.status === 'em_atendimento';
+  // Cores diferentes para Em Atendimento (Amarelo/Laranja) e Confirmado (Fuchsia)
   const bgClass = isEmAtendimento ? 'bg-amber-100 border-amber-500 text-amber-900' : 'bg-fuchsia-100 border-fuchsia-500 text-fuchsia-900';
   
   return (
     <div className="relative group h-full">
+      {/* 1. O Card Visível no Calendário (Compacto) */}
       <div className={`h-full rounded border-l-4 p-1 px-2 text-xs shadow-sm transition-all hover:brightness-95 ${bgClass} overflow-hidden`}>
         <div className="flex justify-between items-center mb-0.5">
            <span className="font-bold">{format(event.start, 'HH:mm')}</span>
            {isEmAtendimento && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="Em Atendimento"></span>}
         </div>
-        <div className="font-semibold truncate">{event.resource.servicos?.nome}</div>
-        <div className="font-light truncate opacity-80">{event.resource.nome_cliente.split(' ')[0]}</div>
+        <div className="font-semibold truncate leading-tight">{event.resource.servicos?.nome}</div>
+        <div className="font-light truncate opacity-80 leading-tight">{event.resource.nome_cliente.split(' ')[0]}</div>
       </div>
-      {/* TOOLTIP FLUTUANTE */}
-      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-64 bg-white p-4 rounded-xl shadow-2xl border border-gray-100 animate-fade-in pointer-events-none">
+
+      {/* 2. O Tooltip Flutuante (Aparece no Hover) */}
+      {/* z-50 garante que fique sobre tudo. translate ajuda a centralizar. */}
+      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-1 z-50 w-64 bg-white p-4 rounded-xl shadow-2xl border border-gray-100 animate-fade-in pointer-events-none">
+         {/* Setinha do tooltip */}
          <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-100"></div>
-         <div className="relative z-10">
+         
+         <div className="relative z-10 text-left">
             <div className="flex items-center gap-3 mb-3 border-b border-gray-100 pb-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg ${isEmAtendimento ? 'bg-amber-500' : 'bg-fuchsia-600'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg uppercase ${isEmAtendimento ? 'bg-amber-500' : 'bg-fuchsia-600'}`}>
                   {event.resource.nome_cliente.charAt(0)}
                 </div>
                 <div>
@@ -78,10 +84,13 @@ const EventoPersonalizado = ({ event }) => {
                   <p className="text-xs text-gray-500">{event.resource.telefone_cliente || 'Sem telefone'}</p>
                 </div>
             </div>
-            <div className="space-y-1 text-sm text-gray-600">
-                <p><span className="font-semibold text-gray-400 text-xs uppercase">Serviço:</span><br/> {event.resource.servicos?.nome}</p>
-                <p><span className="font-semibold text-gray-400 text-xs uppercase">Profissional:</span><br/> {event.resource.profissionais?.nome}</p>
-                <p><span className="font-semibold text-gray-400 text-xs uppercase">Horário:</span><br/> {format(event.start, 'HH:mm')} às {format(event.end, 'HH:mm')}</p>
+            <div className="space-y-1.5 text-sm text-gray-600">
+                <p><span className="font-bold text-xs uppercase text-gray-400 block">Serviço:</span> {event.resource.servicos?.nome}</p>
+                <p><span className="font-bold text-xs uppercase text-gray-400 block">Profissional:</span> {event.resource.profissionais?.nome}</p>
+                <p><span className="font-bold text-xs uppercase text-gray-400 block">Horário:</span> {format(event.start, 'HH:mm')} às {format(event.end, 'HH:mm')}</p>
+                {event.resource.status === 'em_atendimento' && (
+                   <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded">EM ATENDIMENTO</span>
+                )}
             </div>
          </div>
       </div>
@@ -120,7 +129,7 @@ function AdminAgenda() {
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [modalMode, setModalMode] = useState('new'); 
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [calendarView, setCalendarView] = useState('week'); 
+  const [calendarView, setCalendarView] = useState('month'); // Padrão Mês
   const [calendarDate, setCalendarDate] = useState(new Date());
   
   const [allServicos, setAllServicos] = useState([]);
@@ -246,28 +255,22 @@ function AdminAgenda() {
 
   // --- FUNÇÕES "NOVO SERVIÇO" ---
   
-  // 1. Serviço Extra Geral (Botão do Topo)
   const handleAdicionarExtraHoje = () => {
     setModalMode('new');
-    setSelectedEvent({ start: new Date(), end: new Date() }); // Horário atual
+    setSelectedEvent({ start: new Date(), end: new Date() });
     setModalServicoId(''); setModalNome(''); setModalEmail(''); setModalTelefone(''); setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
     setModalProfissionalId(profile?.role !== 'admin' ? profile?.id : (filtroProfissionalId || ''));
     setModalIsOpen(true);
   };
 
-  // 2. Serviço Extra para Cliente Específico (Botão da Lista)
-  // --- MELHORIA SOLICITADA: Preenche os dados automaticamente ---
   const handleAdicionarServicoParaCliente = (ag) => {
     setModalMode('new');
-    setSelectedEvent({ start: new Date() }); // Define horário como AGORA
-    
-    // PREENCHIMENTO AUTOMÁTICO DOS DADOS
+    setSelectedEvent({ start: new Date() });
     setModalNome(ag.nome_cliente);
     setModalTelefone(ag.telefone_cliente);
     setModalEmail(ag.email_cliente || '');
-    setModalProfissionalId(ag.profissional_id); // Mantém o profissional
-    setModalServicoId(''); // Serviço o usuário escolhe
-    
+    setModalProfissionalId(ag.profissional_id);
+    setModalServicoId('');
     setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
     setModalIsOpen(true);
   };
@@ -298,8 +301,6 @@ function AdminAgenda() {
     let ini;
     if (showRemarcar && novoHorarioSelecionado) ini = new Date(novoHorarioSelecionado);
     else if (modalMode === 'new') {
-        // CORREÇÃO CRÍTICA: Se selectedEvent.start existir (calendário), usa ele.
-        // Se for nulo (botão extra), usa new Date() (agora).
         ini = selectedEvent?.start ? new Date(selectedEvent.start) : new Date();
     }
     else ini = new Date(selectedEvent.data_hora_inicio);
@@ -434,7 +435,6 @@ function AdminAgenda() {
                                     <p className="text-sm text-gray-500">{ag.servicos?.nome}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {/* Botão para ADICIONAR SERVIÇO EXTRA (CLONANDO DADOS) */}
                                     <button 
                                         onClick={() => handleAdicionarServicoParaCliente(ag)}
                                         className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm font-bold hover:bg-purple-200 transition"
@@ -589,10 +589,13 @@ function AdminAgenda() {
               selectable={true}
               onSelectSlot={handleSelectSlot} 
               onSelectEvent={handleSelectEvent}
+              
+              // --- AQUI ESTÁ A MÁGICA: Componente Personalizado ---
               components={{ event: EventoPersonalizado }}
+              
               messages={messages}
               culture="pt-BR"
-              tooltipAccessor={null}
+              tooltipAccessor={null} // Desativamos o tooltip nativo (feio)
             />
         </div>
       )}
