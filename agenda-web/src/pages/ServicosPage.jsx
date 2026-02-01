@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '/src/supabaseClient.js';
 import { Link } from 'react-router-dom';
 
-// --- NOVOS IMPORTS PARA O CALENDÁRIO ---
+// --- IMPORTS PARA O CALENDÁRIO E MODAL ---
 import DatePicker, { registerLocale } from 'react-datepicker';
 import { ptBR } from 'date-fns/locale';
+import Modal from 'react-modal'; // Importante para o Modal de Edição em Massa
 import 'react-datepicker/dist/react-datepicker.css';
 
 // Registra o idioma português para o calendário
 registerLocale('pt-BR', ptBR);
+Modal.setAppElement('#root'); // Acessibilidade do Modal
 
 const DIAS_SEMANA = [
   { numero: 0, nome: 'Dom' }, { numero: 1, nome: 'Seg' }, { numero: 2, nome: 'Ter' },
@@ -24,7 +26,7 @@ function ServicosPage() {
   const [categorias, setCategorias] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // --- FORMULÁRIO SERVIÇO ---
+  // --- FORMULÁRIO CRIAR SERVIÇO (Individual) ---
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [duracao, setDuracao] = useState(30); 
@@ -32,10 +34,20 @@ function ServicosPage() {
   const [foto, setFoto] = useState(null); 
   const [categoriaId, setCategoriaId] = useState('');
   
-  // --- CONFIGURAÇÃO DE DISPONIBILIDADE (NOVO) ---
-  const [tipoDisponibilidade, setTipoDisponibilidade] = useState('semanal'); // 'semanal' ou 'datas'
-  const [diasSelecionados, setDiasSelecionados] = useState(new Set([0,1,2,3,4,5,6])); // Para Semanal
-  const [datasEspecificas, setDatasEspecificas] = useState([]); // Para Datas Específicas (Array de Date)
+  // Disponibilidade (Criação)
+  const [tipoDisponibilidade, setTipoDisponibilidade] = useState('semanal'); 
+  const [diasSelecionados, setDiasSelecionados] = useState(new Set([0,1,2,3,4,5,6])); 
+  const [datasEspecificas, setDatasEspecificas] = useState([]); 
+
+  // --- SELEÇÃO EM MASSA (BULK ACTIONS) ---
+  const [selectedServiceIds, setSelectedServiceIds] = useState(new Set());
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+
+  // States do Modal de Edição em Massa (Separados do form de criação)
+  const [bulkTipo, setBulkTipo] = useState('semanal');
+  const [bulkDias, setBulkDias] = useState(new Set([0,1,2,3,4,5,6]));
+  const [bulkDatas, setBulkDatas] = useState([]);
 
   // --- FORMULÁRIO CATEGORIA ---
   const [catNome, setCatNome] = useState('');
@@ -52,7 +64,7 @@ function ServicosPage() {
 
   async function fetchDados() {
     setLoading(true);
-    // Busca Serviços (Incluindo a nova coluna datas_especificas se existir)
+    // Busca Serviços
     const { data: sData, error: sError } = await supabase.from('servicos').select('*, categorias(nome)').order('nome');
     if (sData) setServicos(sData);
     if (sError) console.error("Erro ao buscar serviços:", sError);
@@ -74,10 +86,112 @@ function ServicosPage() {
   };
 
   // ==========================================
-  //          LÓGICA DE SERVIÇOS
+  //          LÓGICA DE SELEÇÃO EM MASSA
+  // ==========================================
+
+  // Selecionar/Deselecionar um serviço
+  const toggleSelectService = (id) => {
+    setSelectedServiceIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
+
+  // Selecionar Todos / Nenhum
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      const allIds = new Set(servicos.map(s => s.id));
+      setSelectedServiceIds(allIds);
+    } else {
+      setSelectedServiceIds(new Set());
+    }
+  };
+
+  // Abrir Modal de Edição em Massa
+  const openBulkModal = () => {
+    if (selectedServiceIds.size === 0) return alert("Selecione pelo menos um serviço.");
+    // Reseta os estados do modal para o padrão
+    setBulkTipo('semanal');
+    setBulkDias(new Set([0,1,2,3,4,5,6]));
+    setBulkDatas([]);
+    setIsBulkModalOpen(true);
+  };
+
+  // Salvar Edição em Massa
+  const handleBulkSave = async () => {
+    setIsBulkSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    // Validação Bulk
+    let payloadDias = null;
+    let payloadDatas = null;
+
+    if (bulkTipo === 'semanal') {
+       if (bulkDias.size === 0) {
+         alert('Selecione pelo menos um dia da semana.');
+         setIsBulkSaving(false); return;
+       }
+       payloadDias = Array.from(bulkDias);
+       payloadDatas = null;
+    } else {
+       if (bulkDatas.length === 0) {
+         alert('Selecione pelo menos uma data no calendário.');
+         setIsBulkSaving(false); return;
+       }
+       payloadDatas = bulkDatas.map(d => d.toISOString().split('T')[0]);
+       payloadDias = null;
+    }
+
+    try {
+      const idsArray = Array.from(selectedServiceIds);
+      const { error } = await supabase
+        .from('servicos')
+        .update({
+          dias_disponiveis: payloadDias,
+          datas_especificas: payloadDatas
+        })
+        .in('id', idsArray);
+
+      if (error) throw error;
+
+      setSuccess(`Disponibilidade atualizada para ${idsArray.length} serviços!`);
+      setSelectedServiceIds(new Set()); // Limpa seleção
+      setIsBulkModalOpen(false); // Fecha modal
+      fetchDados(); // Recarrega lista
+    } catch (err) {
+      console.error(err);
+      setError('Erro ao atualizar em massa: ' + err.message);
+    } finally {
+      setIsBulkSaving(false);
+    }
+  };
+
+  // Handlers para o Modal Bulk (separados dos handlers de criação)
+  const handleBulkDiaToggle = (dia) => {
+    setBulkDias(prev => {
+      const novos = new Set(prev);
+      novos.has(dia) ? novos.delete(dia) : novos.add(dia);
+      return novos;
+    });
+  };
+
+  const handleBulkDataSelect = (date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    const exists = bulkDatas.some(d => d.toISOString().split('T')[0] === dateStr);
+    if (exists) {
+      setBulkDatas(bulkDatas.filter(d => d.toISOString().split('T')[0] !== dateStr));
+    } else {
+      setBulkDatas([...bulkDatas, date]);
+    }
+  };
+
+  // ==========================================
+  //       LÓGICA DE CRIAÇÃO (Individual)
   // ==========================================
   
-  // Toggle para Dias da Semana (Dom, Seg...)
   const handleDiaToggle = (dia) => {
     setDiasSelecionados(prev => {
       const novos = new Set(prev);
@@ -86,17 +200,12 @@ function ServicosPage() {
     });
   };
 
-  // Toggle para Datas Específicas (Calendário)
   const handleDataEspecificaSelect = (date) => {
-    // Verifica se a data já está selecionada (compara strings YYYY-MM-DD)
     const dateStr = date.toISOString().split('T')[0];
     const exists = datasEspecificas.some(d => d.toISOString().split('T')[0] === dateStr);
-
     if (exists) {
-      // Remove se já existe
       setDatasEspecificas(datasEspecificas.filter(d => d.toISOString().split('T')[0] !== dateStr));
     } else {
-      // Adiciona se não existe
       setDatasEspecificas([...datasEspecificas, date]);
     }
   };
@@ -110,25 +219,19 @@ function ServicosPage() {
       return;
     }
 
-    // Validação da disponibilidade
     let payloadDias = null;
     let payloadDatas = null;
 
     if (tipoDisponibilidade === 'semanal') {
        if (diasSelecionados.size === 0) {
-         setError('Selecione pelo menos um dia da semana.');
-         return;
+         setError('Selecione pelo menos um dia da semana.'); return;
        }
        payloadDias = Array.from(diasSelecionados);
-       payloadDatas = null; // Limpa datas específicas
     } else {
        if (datasEspecificas.length === 0) {
-         setError('Selecione pelo menos uma data no calendário.');
-         return;
+         setError('Selecione pelo menos uma data no calendário.'); return;
        }
-       // Converte objetos Date para strings "YYYY-MM-DD" para salvar no banco JSON
        payloadDatas = datasEspecificas.map(d => d.toISOString().split('T')[0]);
-       payloadDias = null; // Limpa dias da semana
     }
 
     setIsUploading(true);
@@ -137,21 +240,15 @@ function ServicosPage() {
       if (foto) fotoUrl = await uploadImage(foto, 'servico-fotos');
 
       const { error } = await supabase.from('servicos').insert({
-        nome, 
-        descricao, 
-        duracao_minutos: duracao, 
-        preco,
-        foto_url: fotoUrl,
-        categoria_id: categoriaId,
-        dias_disponiveis: payloadDias,       // Salva dias ou null
-        datas_especificas: payloadDatas      // Salva array de datas ou null
+        nome, descricao, duracao_minutos: duracao, preco,
+        foto_url: fotoUrl, categoria_id: categoriaId,
+        dias_disponiveis: payloadDias, datas_especificas: payloadDatas
       });
 
       if (error) throw error;
 
       setSuccess('Serviço criado com sucesso!');
       
-      // Reseta formulário
       setNome(''); setDescricao(''); setDuracao(30); setPreco(0); setFoto(null); setCategoriaId('');
       setTipoDisponibilidade('semanal');
       setDiasSelecionados(new Set([0,1,2,3,4,5,6]));
@@ -176,30 +273,26 @@ function ServicosPage() {
   };
 
   // ==========================================
-  //          LÓGICA DE CATEGORIAS (CRUD)
+  //          LÓGICA DE CATEGORIAS
   // ==========================================
   
   const handleEditCategoryClick = (categoria) => {
     setEditingCategory(categoria);
     setCatNome(categoria.nome);
     setCatFoto(null); 
-    setError(null);
-    setSuccess(null);
+    setError(null); setSuccess(null);
     window.scrollTo(0, 0); 
   };
 
   const handleCancelEditCategory = () => {
     setEditingCategory(null);
-    setCatNome('');
-    setCatFoto(null);
-    setError(null);
-    setSuccess(null);
+    setCatNome(''); setCatFoto(null);
+    setError(null); setSuccess(null);
   };
 
   const handleSubmitCategoria = async (e) => {
     e.preventDefault();
     setError(null); setSuccess(null);
-
     if (!catNome) { setError('Nome da categoria é obrigatório.'); return; }
 
     setIsUploading(true);
@@ -210,26 +303,18 @@ function ServicosPage() {
       }
 
       if (editingCategory) {
-        const { error } = await supabase
-          .from('categorias')
-          .update({ nome: catNome, foto_url: fotoUrl })
-          .eq('id', editingCategory.id);
+        const { error } = await supabase.from('categorias').update({ nome: catNome, foto_url: fotoUrl }).eq('id', editingCategory.id);
         if (error) throw error;
         setSuccess('Categoria atualizada com sucesso!');
       } else {
-        const { error } = await supabase.from('categorias').insert({
-          nome: catNome,
-          foto_url: fotoUrl
-        });
+        const { error } = await supabase.from('categorias').insert({ nome: catNome, foto_url: fotoUrl });
         if (error) throw error;
         setSuccess('Categoria criada com sucesso!');
       }
 
-      setEditingCategory(null);
-      setCatNome(''); setCatFoto(null);
+      setEditingCategory(null); setCatNome(''); setCatFoto(null);
       const catInput = document.getElementById('cat-upload');
       if(catInput) catInput.value = '';
-
       fetchDados();
     } catch (err) {
       setError(err.message);
@@ -315,36 +400,20 @@ function ServicosPage() {
                 </div>
               </div>
 
-              {/* --- ÁREA DE DISPONIBILIDADE (ALTERADA) --- */}
+              {/* Área de Disponibilidade (Criação) */}
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                  <label className="block text-sm font-bold text-gray-700 mb-3">Tipo de Disponibilidade</label>
-                 
-                 {/* Seletor de Tipo */}
                  <div className="flex gap-4 mb-4">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="tipoDisp" 
-                        checked={tipoDisponibilidade === 'semanal'} 
-                        onChange={() => setTipoDisponibilidade('semanal')}
-                        className="text-fuchsia-600 focus:ring-fuchsia-500"
-                      />
+                      <input type="radio" name="tipoDisp" checked={tipoDisponibilidade === 'semanal'} onChange={() => setTipoDisponibilidade('semanal')} className="text-fuchsia-600 focus:ring-fuchsia-500" />
                       <span className="text-gray-700 font-medium">Dias da Semana (Recorrente)</span>
                     </label>
-
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="tipoDisp" 
-                        checked={tipoDisponibilidade === 'datas'} 
-                        onChange={() => setTipoDisponibilidade('datas')}
-                        className="text-fuchsia-600 focus:ring-fuchsia-500"
-                      />
+                      <input type="radio" name="tipoDisp" checked={tipoDisponibilidade === 'datas'} onChange={() => setTipoDisponibilidade('datas')} className="text-fuchsia-600 focus:ring-fuchsia-500" />
                       <span className="text-gray-700 font-medium">Datas Específicas (Calendário)</span>
                     </label>
                  </div>
 
-                 {/* Opção 1: Dias da Semana */}
                  {tipoDisponibilidade === 'semanal' && (
                    <div>
                      <p className="text-xs text-gray-500 mb-2">O serviço estará disponível toda semana nestes dias:</p>
@@ -359,34 +428,25 @@ function ServicosPage() {
                    </div>
                  )}
 
-                 {/* Opção 2: Calendário de Datas */}
                  {tipoDisponibilidade === 'datas' && (
                    <div className="text-center">
-                     <p className="text-xs text-gray-500 mb-2">Clique nas datas para adicionar ou remover (ex: Dia do Laser, Botox Day):</p>
+                     <p className="text-xs text-gray-500 mb-2">Clique nas datas para adicionar ou remover:</p>
                      <div className="inline-block border rounded-lg bg-white p-2">
                         <DatePicker
                            selected={null}
                            onChange={handleDataEspecificaSelect}
-                           inline
-                           locale="pt-BR"
-                           minDate={new Date()}
-                           highlightDates={datasEspecificas} // Destaca as datas selecionadas
+                           inline locale="pt-BR" minDate={new Date()}
+                           highlightDates={datasEspecificas}
                            dayClassName={(date) => {
-                              // Estiliza os dias selecionados para ficarem bem visíveis
                               const dateStr = date.toISOString().split('T')[0];
-                              return datasEspecificas.some(d => d.toISOString().split('T')[0] === dateStr)
-                                ? "bg-fuchsia-600 text-white font-bold rounded-full hover:bg-fuchsia-700" 
-                                : undefined;
+                              return datasEspecificas.some(d => d.toISOString().split('T')[0] === dateStr) ? "bg-fuchsia-600 text-white font-bold rounded-full hover:bg-fuchsia-700" : undefined;
                            }}
                         />
                      </div>
-                     <div className="mt-2 text-sm text-fuchsia-700 font-bold">
-                        {datasEspecificas.length} datas selecionadas
-                     </div>
+                     <div className="mt-2 text-sm text-fuchsia-700 font-bold">{datasEspecificas.length} datas selecionadas</div>
                    </div>
                  )}
               </div>
-              {/* --- FIM DA ÁREA DE DISPONIBILIDADE --- */}
 
               <div>
                  <label className="block text-sm font-semibold text-gray-700 mb-2">Foto do Serviço</label>
@@ -406,19 +466,56 @@ function ServicosPage() {
             </form>
           </div>
 
-          {/* Lista de Serviços */}
+          {/* LISTA DE SERVIÇOS (COM BULK ACTIONS) */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
-             <h2 className="text-xl font-bold mb-6 text-gray-800">Serviços Cadastrados</h2>
+             
+             <div className="flex justify-between items-end mb-6">
+                <h2 className="text-xl font-bold text-gray-800">Serviços Cadastrados</h2>
+                
+                {/* Header da Lista com Selecionar Todos */}
+                <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-lg border border-gray-200">
+                   <input 
+                      type="checkbox" 
+                      onChange={handleSelectAll} 
+                      checked={servicos.length > 0 && selectedServiceIds.size === servicos.length}
+                      className="w-4 h-4 text-fuchsia-600 rounded focus:ring-fuchsia-500" 
+                   />
+                   <span className="text-sm font-semibold text-gray-600">Selecionar Todos</span>
+                </div>
+             </div>
+
+             {/* BARRA DE AÇÕES EM MASSA */}
+             {selectedServiceIds.size > 0 && (
+                <div className="mb-4 bg-fuchsia-100 border border-fuchsia-200 p-3 rounded-lg flex justify-between items-center animate-fade-in">
+                   <span className="text-fuchsia-800 font-bold text-sm">
+                      {selectedServiceIds.size} {selectedServiceIds.size === 1 ? 'serviço selecionado' : 'serviços selecionados'}
+                   </span>
+                   <button 
+                      onClick={openBulkModal}
+                      className="bg-fuchsia-600 text-white px-4 py-2 rounded-md font-bold text-sm hover:bg-fuchsia-700 shadow-md transition-all flex items-center gap-2"
+                   >
+                      📅 Alterar Disponibilidade em Massa
+                   </button>
+                </div>
+             )}
+
              <ul className="divide-y divide-gray-100">
                {servicos.map(s => (
-                 <li key={s.id} className="py-4 flex justify-between items-center hover:bg-gray-50 rounded-lg px-2">
+                 <li key={s.id} className={`py-4 flex justify-between items-center hover:bg-gray-50 rounded-lg px-2 transition-colors ${selectedServiceIds.has(s.id) ? 'bg-fuchsia-50' : ''}`}>
                     <div className="flex items-center gap-4">
+                       {/* CHECKBOX INDIVIDUAL */}
+                       <input 
+                          type="checkbox" 
+                          checked={selectedServiceIds.has(s.id)}
+                          onChange={() => toggleSelectService(s.id)}
+                          className="w-5 h-5 text-fuchsia-600 rounded focus:ring-fuchsia-500 cursor-pointer"
+                       />
+
                        <img src={s.foto_url || 'https://via.placeholder.com/150'} className="w-14 h-14 rounded-lg object-cover bg-gray-100" />
                        <div>
                           <p className="font-bold text-gray-800">{s.nome}</p>
                           <div className="text-xs text-gray-500 font-medium uppercase">
                              {s.categorias?.nome || 'Sem Categoria'} 
-                             {/* Mostra tag se for data específica */}
                              {s.datas_especificas && s.datas_especificas.length > 0 && (
                                 <span className="ml-2 bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-[10px] border border-yellow-200">
                                   📅 Datas Especiais
@@ -505,6 +602,85 @@ function ServicosPage() {
           </div>
         </div>
       )}
+
+      {/* --- MODAL DE EDIÇÃO EM MASSA --- */}
+      <Modal
+        isOpen={isBulkModalOpen}
+        onRequestClose={() => setIsBulkModalOpen(false)}
+        className="Modal"
+        overlayClassName="ModalOverlay"
+      >
+        <div className="bg-gradient-to-r from-fuchsia-600 to-purple-700 p-6 rounded-t-2xl text-white relative shrink-0">
+           <h2 className="text-2xl font-bold">Edição em Massa</h2>
+           <p className="text-fuchsia-100 text-sm opacity-90 mt-1">
+             Aplicando regras para {selectedServiceIds.size} serviços selecionados.
+           </p>
+           <button onClick={() => setIsBulkModalOpen(false)} className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl font-bold">&times;</button>
+        </div>
+
+        <div className="p-6 bg-white overflow-y-auto max-h-[70vh]">
+           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <label className="block text-sm font-bold text-gray-700 mb-3">Definir Nova Disponibilidade</label>
+              
+              {/* Seletor de Tipo Bulk */}
+              <div className="flex gap-4 mb-4">
+                 <label className="flex items-center gap-2 cursor-pointer">
+                   <input type="radio" checked={bulkTipo === 'semanal'} onChange={() => setBulkTipo('semanal')} className="text-fuchsia-600 focus:ring-fuchsia-500" />
+                   <span className="text-gray-700 font-medium">Dias da Semana</span>
+                 </label>
+                 <label className="flex items-center gap-2 cursor-pointer">
+                   <input type="radio" checked={bulkTipo === 'datas'} onChange={() => setBulkTipo('datas')} className="text-fuchsia-600 focus:ring-fuchsia-500" />
+                   <span className="text-gray-700 font-medium">Datas Específicas</span>
+                 </label>
+              </div>
+
+              {/* Opção Bulk: Semanal */}
+              {bulkTipo === 'semanal' && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Todos os serviços selecionados funcionarão nestes dias:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {DIAS_SEMANA.map(dia => (
+                      <label key={dia.numero} className={`flex items-center justify-center px-4 py-2 rounded-full cursor-pointer text-sm font-medium transition-all border select-none ${bulkDias.has(dia.numero) ? 'bg-fuchsia-600 text-white border-fuchsia-600' : 'bg-white text-gray-600 border-gray-300'}`}>
+                        <input type="checkbox" checked={bulkDias.has(dia.numero)} onChange={() => handleBulkDiaToggle(dia.numero)} className="hidden" />
+                        {dia.nome}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Opção Bulk: Datas */}
+              {bulkTipo === 'datas' && (
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-2">Clique para selecionar as datas para todos os serviços:</p>
+                  <div className="inline-block border rounded-lg bg-white p-2">
+                     <DatePicker
+                        selected={null}
+                        onChange={handleBulkDataSelect}
+                        inline locale="pt-BR" minDate={new Date()}
+                        highlightDates={bulkDatas}
+                        dayClassName={(date) => {
+                           const dateStr = date.toISOString().split('T')[0];
+                           return bulkDatas.some(d => d.toISOString().split('T')[0] === dateStr) ? "bg-fuchsia-600 text-white font-bold rounded-full hover:bg-fuchsia-700" : undefined;
+                        }}
+                     />
+                  </div>
+                  <div className="mt-2 text-sm text-fuchsia-700 font-bold">{bulkDatas.length} datas selecionadas</div>
+                </div>
+              )}
+           </div>
+        </div>
+
+        <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3 rounded-b-2xl">
+           <button onClick={() => setIsBulkModalOpen(false)} className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">
+             Cancelar
+           </button>
+           <button onClick={handleBulkSave} disabled={isBulkSaving} className="flex-1 py-3 bg-fuchsia-600 text-white font-bold rounded-lg hover:bg-fuchsia-700 transition shadow-md disabled:bg-fuchsia-400">
+             {isBulkSaving ? 'Aplicando...' : 'Salvar Alterações'}
+           </button>
+        </div>
+      </Modal>
+
     </div>
   );
 }
