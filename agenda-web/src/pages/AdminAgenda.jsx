@@ -49,35 +49,34 @@ function formatarHora(dataISO) {
 }
 
 // =========================================================
-//    COMPONENTE DE EVENTO COM TOOLTIP (HOVER)
+//    COMPONENTE DE EVENTO COM TOOLTIP (CORRIGIDO)
 // =========================================================
 const EventoPersonalizado = ({ event }) => {
   const isEmAtendimento = event.resource.status === 'em_atendimento';
   const bgClass = isEmAtendimento ? 'bg-amber-100 border-amber-500 text-amber-900' : 'bg-fuchsia-100 border-fuchsia-500 text-fuchsia-900';
   
   return (
-    // 'group' permite controlar o hover. 'relative' para posicionar o tooltip.
-    <div className="relative group h-full w-full">
+    // Removido w-full para não quebrar a visualização de Dia/Semana
+    <div className="relative group h-full text-xs font-sans">
       
-      {/* --- O CARD VISÍVEL NA GRADE --- */}
-      <div className={`h-full w-full rounded border-l-4 p-1 px-2 text-xs shadow-sm transition-all hover:brightness-95 ${bgClass} overflow-hidden flex flex-col justify-center`}>
+      {/* --- CARD PRINCIPAL (VISUALIZAÇÃO NORMAL) --- */}
+      <div className={`h-full w-full rounded border-l-4 p-1 px-2 shadow-sm transition-all hover:brightness-95 ${bgClass} overflow-hidden flex flex-col justify-start`}>
         <div className="flex justify-between items-center mb-0.5">
            <span className="font-bold">{format(event.start, 'HH:mm')}</span>
            {isEmAtendimento && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="Em Atendimento"></span>}
         </div>
-        <div className="font-semibold truncate leading-tight">{event.resource.servicos?.nome}</div>
-        <div className="font-light truncate opacity-80 leading-tight">{event.resource.nome_cliente.split(' ')[0]}</div>
+        {/* Adicionado truncate para não quebrar linha em visualização pequena */}
+        <div className="font-semibold truncate">{event.resource.servicos?.nome}</div>
+        <div className="font-light truncate opacity-80">{event.resource.nome_cliente.split(' ')[0]}</div>
       </div>
 
-      {/* --- TOOLTIP FLUTUANTE (EXPANDIDO) --- */}
-      {/* 'z-50' garante que fique sobre os outros dias. */}
-      {/* 'min-w-[220px]' garante largura suficiente mesmo em células pequenas do mês */}
-      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-1 z-50 min-w-[240px] bg-white p-4 rounded-xl shadow-2xl border border-gray-200 animate-fade-in pointer-events-none">
+      {/* --- TOOLTIP (SOBREPOSIÇÃO MÁXIMA) --- */}
+      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-64 bg-white p-4 rounded-xl shadow-2xl border border-gray-200 animate-fade-in pointer-events-none">
          
-         {/* Setinha decorativa */}
+         {/* Triângulo (Seta) */}
          <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-200"></div>
          
-         <div className="relative z-10 text-left">
+         <div className="relative z-50 text-left">
             <div className="flex items-center gap-3 mb-3 border-b border-gray-100 pb-2">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg uppercase shrink-0 ${isEmAtendimento ? 'bg-amber-500' : 'bg-fuchsia-600'}`}>
                   {event.resource.nome_cliente.charAt(0)}
@@ -476,16 +475,16 @@ function AdminAgenda() {
     );
   };
 
-  // --- DEFINIÇÃO DE ESTILOS DO CALENDÁRIO (PARA CORRIGIR MÊS) ---
+  // --- CONFIGURAÇÃO CHAVE PARA O CALENDÁRIO ---
   const eventStyleGetter = (event, start, end, isSelected) => {
-    // Isso garante que o container do evento (no mês) não corte o conteúdo
     return {
       style: {
+        // Garante que o container do evento seja transparente para mostrar nosso Card
         backgroundColor: 'transparent',
         border: 'none',
-        overflow: 'visible', // CRUCIAL: Permite que o tooltip saia da célula
-        zIndex: 10,
-        padding: 0
+        padding: 0,
+        overflow: 'visible', // Permite o tooltip vazar
+        zIndex: 20
       }
     };
   };
