@@ -172,9 +172,10 @@ function AgendarPage() {
     
     const loadProfs = async () => {
       setIsLoadingProfissionais(true);
+      // CORREÇÃO: Removido 'foto_url' do select para evitar erro 400 se a coluna não existir
       const { data, error } = await supabase
         .from('profissionais_servicos')
-        .select('profissionais ( id, nome, foto_url )') // Puxar foto se tiver
+        .select('profissionais ( id, nome )') 
         .eq('servico_id', serv.id);
       
       if (!error && data) {
@@ -453,7 +454,7 @@ function AgendarPage() {
                     {profissionais.map(prof => (
                       <button key={prof.id} onClick={() => selecionarProfissional(prof)} className="p-4 border border-gray-100 rounded-2xl hover:border-fuchsia-400 hover:shadow-md transition-all text-center group bg-white">
                         <div className="w-20 h-20 bg-gray-100 rounded-full mx-auto mb-3 overflow-hidden border-2 border-transparent group-hover:border-fuchsia-300 transition-all">
-                           {/* Se tiver foto do profissional (futuro), poe aqui. Senão usa inicial */}
+                           {/* Como o banco não tem foto ainda, usa inicial */}
                            <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400 group-hover:text-fuchsia-500">
                              {prof.nome.charAt(0)}
                            </div>
