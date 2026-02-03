@@ -9,11 +9,10 @@ import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('pt-BR', ptBR); 
 
-// --- COMPONENTE DE SUCESSO (Atualizado para Múltiplos Itens) ---
+// --- COMPONENTE DE SUCESSO (Com Botão Piscante) ---
 function TelaSucesso({ itensAgendados, cliente, onNovoAgendamento }) {
   const numeroWhatsapp = '5519988136946'; 
   
-  // Monta mensagem detalhada para o WhatsApp
   let mensagemWhatsapp = `Olá! Acabei de realizar agendamentos no site:\n`;
   mensagemWhatsapp += `Cliente: ${cliente.nome}\n\n`;
   
@@ -24,53 +23,33 @@ function TelaSucesso({ itensAgendados, cliente, onNovoAgendamento }) {
     mensagemWhatsapp += `*${index + 1}. ${item.servico_nome}*\n`;
     mensagemWhatsapp += `   Profissional: ${item.profissional_nome || 'Indiferente'}\n`;
     mensagemWhatsapp += `   Data: ${dataFormatada} às ${horaFormatada}\n`;
-    mensagemWhatsapp += `   ID: ${item.id}\n\n`;
   });
 
   const linkWhatsapp = `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(mensagemWhatsapp)}`;
 
   return (
-    <div className="p-4 md:p-8 max-w-lg mx-auto bg-gray-50 shadow-md rounded-lg mt-10 text-center animate-fade-in">
-      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-        <span className="text-3xl">🎉</span>
+    <div className="p-6 md:p-10 max-w-lg mx-auto bg-white shadow-2xl rounded-3xl mt-10 text-center animate-fade-in border border-fuchsia-50">
+      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+        <span className="text-4xl">🎉</span>
       </div>
-      <h1 className="text-3xl font-bold text-green-600 mb-2">
-        Tudo Certo!
+      <h1 className="text-3xl font-extrabold text-gray-800 mb-2">
+        Agendamento Realizado!
       </h1>
-      <p className="text-gray-600 mb-6">Seus agendamentos foram confirmados com sucesso.</p>
+      <p className="text-gray-500 mb-8">Agora, confirme enviando o comprovante.</p>
       
-      <div className="bg-white border border-gray-200 rounded-lg text-left overflow-hidden shadow-sm mb-6">
-        <div className="bg-fuchsia-50 p-3 border-b border-fuchsia-100">
-          <p className="font-bold text-fuchsia-800 text-sm text-center">Resumo dos Agendamentos</p>
-        </div>
-        <div className="p-4 space-y-4 max-h-60 overflow-y-auto">
-          {itensAgendados.map((item, idx) => (
-            <div key={idx} className="border-b border-gray-100 last:border-0 pb-2 last:pb-0">
-              <p className="font-bold text-gray-800">{item.servico_nome}</p>
-              <p className="text-sm text-gray-600">
-                {new Date(item.data_hora_inicio).toLocaleDateString('pt-BR')} às {new Date(item.data_hora_inicio).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
-              </p>
-              <p className="text-xs text-gray-500">Prof: {item.profissional_nome || '-'}</p>
-              <p className="text-xs text-fuchsia-600 font-mono mt-1">ID: {item.id}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
+      {/* Botão Piscante */}
       <a
         href={linkWhatsapp}
         target="_blank"
         rel="noopener noreferrer"
-        className="block w-full p-4 rounded-lg text-white font-bold text-lg bg-green-500 hover:bg-green-600 transition-all shadow-lg transform hover:-translate-y-1"
+        className="block w-full p-4 rounded-xl text-white font-bold text-lg bg-green-500 hover:bg-green-600 transition-all shadow-xl hover:shadow-2xl transform hover:-translate-y-1 animate-pulse-strong flex items-center justify-center gap-3"
       >
-        Enviar Comprovante no WhatsApp
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        Enviar no WhatsApp
       </a>
 
-      <div className="mt-6 flex flex-col gap-3">
-        <Link to="/consultar" className="text-sm text-fuchsia-600 hover:underline">
-          Consultar meus agendamentos
-        </Link>
-        <button onClick={onNovoAgendamento} className="text-sm text-gray-500 hover:text-gray-700">
+      <div className="mt-8 pt-6 border-t border-gray-100">
+        <button onClick={onNovoAgendamento} className="text-fuchsia-600 font-semibold hover:underline">
           Voltar para o início
         </button>
       </div>
@@ -78,57 +57,43 @@ function TelaSucesso({ itensAgendados, cliente, onNovoAgendamento }) {
   );
 }
 
-// --- COMPONENTE DE RESUMO LATERAL (Carrinho) ---
+// --- RESUMO LATERAL ---
 function ResumoPedido({ carrinho, itemAtual }) {
-  // Calcula total do carrinho + item atual (se tiver selecionado)
   const itensParaMostrar = [...carrinho];
   if (itemAtual && itemAtual.servico) {
     itensParaMostrar.push(itemAtual);
   }
-
   const total = itensParaMostrar.reduce((acc, item) => acc + (item.servico?.preco || 0), 0);
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-100 sticky top-6">
-      <h3 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2 flex justify-between items-center">
-        <span>Resumo</span>
-        <span className="text-xs font-normal bg-fuchsia-100 text-fuchsia-800 px-2 py-1 rounded-full">
-          {itensParaMostrar.length} {itensParaMostrar.length === 1 ? 'item' : 'itens'}
-        </span>
+    <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 sticky top-6">
+      <h3 className="text-lg font-bold text-gray-800 mb-4 flex justify-between items-center">
+        <span>🛒 Resumo</span>
+        <span className="bg-fuchsia-100 text-fuchsia-700 text-xs px-2 py-1 rounded-lg">{itensParaMostrar.length} itens</span>
       </h3>
       
-      <div className="space-y-4">
+      <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
         {itensParaMostrar.length === 0 ? (
-          <p className="text-sm text-gray-400 italic text-center py-4">Seu carrinho está vazio.</p>
+          <p className="text-sm text-gray-400 italic text-center py-4">Selecione um serviço...</p>
         ) : (
           itensParaMostrar.map((item, idx) => (
-            <div key={idx} className="text-sm border-b border-gray-50 pb-3 last:border-0 relative group">
-              <div className="flex justify-between font-semibold text-gray-700">
+            <div key={idx} className="text-sm border-b border-gray-50 pb-3 last:border-0">
+              <div className="flex justify-between font-bold text-gray-700 mb-1">
                 <span>{item.servico?.nome}</span>
                 <span>R$ {item.servico?.preco.toFixed(2)}</span>
               </div>
-              <div className="text-xs text-gray-500 mt-1 flex flex-col gap-0.5">
-                <span>📅 {item.data ? item.data.toLocaleDateString('pt-BR') : '...'}</span>
-                <span>⏰ {item.horario ? item.horario.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '...'}</span>
-                <span>👤 {item.profissional ? item.profissional.nome : 'Qualquer Profissional'}</span>
+              <div className="text-xs text-gray-500 flex flex-col gap-1">
+                {item.data && <span>📅 {item.data.toLocaleDateString('pt-BR')}</span>}
+                {item.horario && <span>⏰ {item.horario.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>}
+                {item.profissional && <span>👤 {item.profissional.nome}</span>}
               </div>
-              {/* Indicador de item atual (ainda não adicionado) */}
-              {item === itemAtual && (
-                <span className="absolute top-0 right-0 -mt-2 -mr-2 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-fuchsia-500"></span>
-                </span>
-              )}
             </div>
           ))
         )}
-
-        <div className="border-t pt-4 mt-2 flex justify-between items-center">
-          <span className="text-gray-600 font-bold">Total</span>
-          <span className="text-2xl font-bold text-fuchsia-600">
-            R$ {total.toFixed(2)}
-          </span>
-        </div>
+      </div>
+      <div className="border-t border-dashed border-gray-200 pt-4 mt-2 flex justify-between items-center">
+        <span className="text-gray-600 font-bold">Total Estimado</span>
+        <span className="text-2xl font-black text-fuchsia-600">R$ {total.toFixed(2)}</span>
       </div>
     </div>
   );
@@ -136,31 +101,25 @@ function ResumoPedido({ carrinho, itemAtual }) {
 
 // --- COMPONENTE PRINCIPAL ---
 function AgendarPage() {
-  // --- ESTADOS DE DADOS ---
   const [categorias, setCategorias] = useState([]);
   const [todosServicos, setTodosServicos] = useState([]);
   const [servicosFiltrados, setServicosFiltrados] = useState([]);
   const [profissionais, setProfissionais] = useState([]);
   const [horariosDisponiveis, setHorariosDisponiveis] = useState([]);
+  const [carrinho, setCarrinho] = useState([]); 
   
-  // --- ESTADOS DO CARRINHO E SELEÇÃO ATUAL ---
-  const [carrinho, setCarrinho] = useState([]); // Lista de agendamentos prontos para salvar
-  
-  // Seleção atual (temporária antes de ir pro carrinho)
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(null);
   const [servicoSelecionado, setServicoSelecionado] = useState(null);
   const [profissionalSelecionado, setProfissionalSelecionado] = useState(null);
   const [dataSelecionada, setDataSelecionada] = useState(new Date());
   const [horarioSelecionado, setHorarioSelecionado] = useState(null);
   
-  // --- ESTADOS DE CONTROLE ---
-  const [etapa, setEtapa] = useState(1); // 1:Categ/Serv, 2:Prof, 3:Data, 4:Hora, 5:Revisão/Dados
+  const [etapa, setEtapa] = useState(1); 
   const [isLoadingProfissionais, setIsLoadingProfissionais] = useState(false);
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sucessoDados, setSucessoDados] = useState(null); // Objeto com dados finais para tela de sucesso
+  const [sucessoDados, setSucessoDados] = useState(null);
   
-  // --- ESTADOS DO FORMULÁRIO ---
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [dataNascimento, setDataNascimento] = useState('');
@@ -168,12 +127,11 @@ function AgendarPage() {
   
   const hoje = new Date();
   const limiteFuturo = new Date();
-  limiteFuturo.setMonth(hoje.getMonth() + 3); // Permitir agendamento até 3 meses
+  limiteFuturo.setMonth(hoje.getMonth() + 3);
 
-  // --- 1. CARREGAMENTO INICIAL ---
+  // --- CARREGAMENTO INICIAL ---
   useEffect(() => {
     const init = async () => {
-      // Carregar LocalStorage
       const nomeS = localStorage.getItem('salao_cliente_nome');
       const telS = localStorage.getItem('salao_cliente_telefone');
       const nascS = localStorage.getItem('salao_cliente_nascimento');
@@ -182,7 +140,6 @@ function AgendarPage() {
       if (nascS) setDataNascimento(nascS);
       if (nomeS) setLembrarDados(true);
 
-      // Carregar Banco
       const [catRes, servRes] = await Promise.all([
         supabase.from('categorias').select('*').order('nome'),
         supabase.from('servicos').select('*').order('nome')
@@ -194,7 +151,7 @@ function AgendarPage() {
     init();
   }, []);
 
-  // --- 2. FILTRAR SERVIÇOS ---
+  // --- FILTRO DE SERVIÇOS ---
   useEffect(() => {
     if (categoriaSelecionada) {
       setServicosFiltrados(todosServicos.filter(s => s.categoria_id === categoriaSelecionada.id));
@@ -203,31 +160,39 @@ function AgendarPage() {
     }
   }, [categoriaSelecionada, todosServicos]);
 
-  // --- 3. BUSCAR PROFISSIONAIS ---
-  useEffect(() => {
-    if (servicoSelecionado) {
-      setProfissionais([]);
-      setProfissionalSelecionado(null);
-      setHorarioSelecionado(null);
+  // --- SELEÇÃO DE PROFISSIONAL (AUTO-AVANÇO) ---
+  const selecionarServico = (serv) => {
+    setServicoSelecionado(serv);
+    setEtapa(2); // Avança direto
+    
+    // Busca profissionais imediatamente
+    setProfissionais([]);
+    setProfissionalSelecionado(null);
+    setHorarioSelecionado(null);
+    
+    const loadProfs = async () => {
+      setIsLoadingProfissionais(true);
+      const { data, error } = await supabase
+        .from('profissionais_servicos')
+        .select('profissionais ( id, nome, foto_url )') // Puxar foto se tiver
+        .eq('servico_id', serv.id);
       
-      const loadProfs = async () => {
-        setIsLoadingProfissionais(true);
-        const { data, error } = await supabase
-          .from('profissionais_servicos')
-          .select('profissionais ( id, nome )')
-          .eq('servico_id', servicoSelecionado.id);
-        
-        if (!error && data) {
-          setProfissionais(data.map(d => d.profissionais));
-        }
-        setIsLoadingProfissionais(false);
-      };
-      loadProfs();
-    }
-  }, [servicoSelecionado]);
+      if (!error && data) {
+        setProfissionais(data.map(d => d.profissionais));
+      }
+      setIsLoadingProfissionais(false);
+    };
+    loadProfs();
+  };
 
-  // --- 4. LÓGICA DE HORÁRIOS (OTIMIZADA) ---
-  async function buscarHorariosDisponiveis(dataAlvo = dataSelecionada) {
+  const selecionarProfissional = (prof) => {
+    setProfissionalSelecionado(prof);
+    setEtapa(3); // Avança direto para data
+    buscarHorariosDisponiveis(new Date()); // Já busca para hoje
+  };
+
+  // --- BUSCA HORÁRIOS ---
+  async function buscarHorariosDisponiveis(dataAlvo) {
     if (!servicoSelecionado || !profissionalSelecionado) return;
 
     setIsLoadingHorarios(true);
@@ -238,36 +203,26 @@ function AgendarPage() {
       const diaDaSemana = dataAlvo.getDay();
       const dataISO = dataAlvo.toISOString().split('T')[0];
 
-      // A. Validação de Dia
+      // Validação rápida de dia (para evitar chamadas inúteis)
       let diaValido = true;
-      // 1. Datas Específicas
       if (servicoSelecionado.datas_especificas?.length > 0) {
         if (!servicoSelecionado.datas_especificas.includes(dataISO)) diaValido = false;
-      } 
-      // 2. Dias da Semana
-      else if (servicoSelecionado.dias_disponiveis?.length > 0) {
+      } else if (servicoSelecionado.dias_disponiveis?.length > 0) {
         if (!servicoSelecionado.dias_disponiveis.includes(diaDaSemana)) diaValido = false;
       }
 
-      if (!diaValido) {
-        setIsLoadingHorarios(false);
-        return; 
-      }
+      if (!diaValido) { setIsLoadingHorarios(false); return; }
 
-      // B. Horário do Profissional
-      const { data: jornada, error: errJornada } = await supabase
+      const { data: jornada } = await supabase
         .from('horarios_trabalho')
         .select('hora_inicio, hora_fim')
         .eq('dia_semana', diaDaSemana)
         .eq('profissional_id', profissionalSelecionado.id)
-        .maybeSingle(); // maybeSingle evita erro 406 se não achar
+        .maybeSingle();
 
-      if (errJornada || !jornada) {
-        setIsLoadingHorarios(false);
-        return; // Profissional não trabalha nesse dia
-      }
+      if (!jornada) { setIsLoadingHorarios(false); return; }
 
-      // C. Agendamentos Existentes
+      // Verifica conflitos
       const inicioDia = new Date(dataAlvo); inicioDia.setHours(0,0,0,0);
       const fimDia = new Date(dataAlvo); fimDia.setHours(23,59,59,999);
 
@@ -279,7 +234,6 @@ function AgendarPage() {
         .eq('profissional_id', profissionalSelecionado.id)
         .neq('status', 'cancelado');
 
-      // D. Cálculo de Slots
       const slots = [];
       const [hIni, mIni] = jornada.hora_inicio.split(':').map(Number);
       const [hFim, mFim] = jornada.hora_fim.split(':').map(Number);
@@ -291,109 +245,96 @@ function AgendarPage() {
 
       while (atual < fimExpediente) {
         const fimSlot = new Date(atual.getTime() + duracao * 60000);
-        
         if (fimSlot > fimExpediente) break;
 
-        // Regra: Não mostrar passado
         if (atual > agora) {
-          // Regra: Colisão
           const colide = agendamentos?.some(ag => {
             const agIni = new Date(ag.data_hora_inicio);
             const agFim = new Date(ag.data_hora_fim);
             return (atual >= agIni && atual < agFim) || (fimSlot > agIni && fimSlot <= agFim);
           });
-
           if (!colide) slots.push(new Date(atual));
         }
-        
         atual = new Date(atual.getTime() + duracao * 60000);
       }
-      
       setHorariosDisponiveis(slots);
 
     } catch (err) {
-      console.error("Erro ao calcular horários:", err);
+      console.error(err);
     } finally {
       setIsLoadingHorarios(false);
     }
   }
 
-  // --- GERENCIAMENTO DE NAVEGAÇÃO E CARRINHO ---
+  // --- RENDERIZADOR DO CALENDÁRIO (BOLINHAS VERDES) ---
+  const renderDiaCalendario = (day, date) => {
+    // Lógica visual para mostrar bolinha verde se o dia for "potencialmente" válido
+    let temVagaVisual = false;
+    if (servicoSelecionado) {
+        const dataISO = date.toISOString().split('T')[0];
+        const diaSemana = date.getDay();
+        
+        if (servicoSelecionado.datas_especificas?.length > 0) {
+            temVagaVisual = servicoSelecionado.datas_especificas.includes(dataISO);
+        } else if (servicoSelecionado.dias_disponiveis?.length > 0) {
+            temVagaVisual = servicoSelecionado.dias_disponiveis.includes(diaSemana);
+        } else {
+            // Se não tiver restrição, assume que todo dia (exceto passado) pode ter
+            temVagaVisual = true; 
+        }
+    }
+    
+    // Não mostra bolinha no passado
+    if (date < new Date(new Date().setHours(0,0,0,0))) temVagaVisual = false;
 
-  const adicionarAoCarrinho = () => {
-    if (!servicoSelecionado || !profissionalSelecionado || !dataSelecionada || !horarioSelecionado) return;
+    return (
+        <div className="relative flex flex-col items-center justify-center h-full w-full">
+            <span className="z-10">{day}</span>
+            {temVagaVisual && (
+                <div className="day-indicator-dot absolute bottom-1 w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+            )}
+        </div>
+    );
+  };
 
+  const selecionarHorario = (h) => {
     const novoItem = {
-      tempId: Date.now(), // ID temporário para UI
+      tempId: Date.now(),
       servico: servicoSelecionado,
       profissional: profissionalSelecionado,
       data: dataSelecionada,
-      horario: horarioSelecionado
+      horario: h
     };
-
     setCarrinho([...carrinho, novoItem]);
-    
-    // Limpa seleção atual
     setCategoriaSelecionada(null);
     setServicoSelecionado(null);
     setProfissionalSelecionado(null);
     setHorarioSelecionado(null);
-    
-    // Vai para a tela de revisão (Etapa 5)
-    setEtapa(5);
+    setEtapa(5); // Vai para revisão
   };
 
   const removerDoCarrinho = (index) => {
     const novoCarrinho = [...carrinho];
     novoCarrinho.splice(index, 1);
     setCarrinho(novoCarrinho);
-    if (novoCarrinho.length === 0) {
-      // Se esvaziar, volta para o início
-      setEtapa(1);
-    }
-  };
-
-  const handleAdicionarMais = () => {
-    if (carrinho.length >= 3) {
-      alert("Para garantir a qualidade, permitimos agendar no máximo 3 serviços por vez.");
-      return;
-    }
-    setEtapa(1); // Volta para escolher outro serviço
+    if (novoCarrinho.length === 0) setEtapa(1);
   };
 
   const finalizarAgendamento = async () => {
-    // Validação
     const telefoneLimpo = telefone.replace(/[^0-9]/g, '');
     if (!nome || telefoneLimpo.length < 10 || !dataNascimento) {
-      alert('Preencha Nome, Telefone (com DDD) e Data de Nascimento.');
-      return;
+      alert('Preencha seus dados corretamente.'); return;
     }
-
     setIsSubmitting(true);
-
     try {
-      // 1. Salvar/Atualizar Cliente
-      await supabase.from('clientes').upsert({
-        telefone: telefoneLimpo,
-        nome: nome,
-        data_nascimento: dataNascimento
-      }, { onConflict: 'telefone' });
-
-      // 2. Salvar Preferências Locais
+      await supabase.from('clientes').upsert({ telefone: telefoneLimpo, nome, data_nascimento: dataNascimento }, { onConflict: 'telefone' });
       if (lembrarDados) {
         localStorage.setItem('salao_cliente_nome', nome);
         localStorage.setItem('salao_cliente_telefone', telefone);
         localStorage.setItem('salao_cliente_nascimento', dataNascimento);
-      } else {
-        localStorage.removeItem('salao_cliente_nome');
-        localStorage.removeItem('salao_cliente_telefone');
-        localStorage.removeItem('salao_cliente_nascimento');
       }
-
-      // 3. Processar Agendamentos em Paralelo (Promise.all)
       const promises = carrinho.map(item => {
         const fim = new Date(item.horario.getTime() + item.servico.duracao_minutos * 60000);
-        
         return supabase.from('agendamentos').insert({
           servico_id: item.servico.id,
           profissional_id: item.profissional.id,
@@ -404,109 +345,92 @@ function AgendarPage() {
           status: 'confirmado'
         }).select().single();
       });
-
       const resultados = await Promise.all(promises);
+      if (resultados.some(r => r.error)) throw new Error("Erro ao salvar.");
       
-      // Verifica erros
-      const erros = resultados.filter(r => r.error);
-      if (erros.length > 0) throw new Error("Erro ao salvar alguns itens.");
-
-      // Sucesso!
-      const agendamentosConfirmados = resultados.map((r, index) => ({
-        ...r.data,
-        servico_nome: carrinho[index].servico.nome,
-        profissional_nome: carrinho[index].profissional.nome
-      }));
-
       setSucessoDados({
-        itens: agendamentosConfirmados,
+        itens: resultados.map((r, i) => ({ ...r.data, servico_nome: carrinho[i].servico.nome, profissional_nome: carrinho[i].profissional.nome })),
         cliente: { nome }
       });
-
     } catch (err) {
-      console.error(err);
-      alert("Ocorreu um erro ao processar seu agendamento. Tente novamente ou entre em contato.");
+      alert("Erro ao agendar. Tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --- RENDERIZAÇÃO DAS ETAPAS ---
-  
-  if (sucessoDados) {
-    return (
-      <TelaSucesso 
-        itensAgendados={sucessoDados.itens} 
-        cliente={sucessoDados.cliente}
-        onNovoAgendamento={() => window.location.reload()} 
-      />
-    );
-  }
+  if (sucessoDados) return <TelaSucesso itensAgendados={sucessoDados.itens} cliente={sucessoDados.cliente} onNovoAgendamento={() => window.location.reload()} />;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
       <div className="max-w-6xl mx-auto mt-4">
+        
+        {/* Header Simples */}
         <div className="flex justify-between items-center mb-6">
-          <Link to="/" className="text-fuchsia-600 hover:underline text-sm font-bold flex items-center gap-1">
-            <span>&larr;</span> Início
+          <Link to="/" className="text-fuchsia-600 hover:text-fuchsia-800 font-bold flex items-center gap-2 transition-colors">
+            <span className="text-xl">←</span> Início
           </Link>
           {carrinho.length > 0 && (
-            <span className="text-xs bg-fuchsia-100 text-fuchsia-800 px-3 py-1 rounded-full font-bold">
-              {carrinho.length} serviço(s) no carrinho
+            <span className="bg-fuchsia-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-md animate-bounce">
+              {carrinho.length} no carrinho
             </span>
           )}
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* ÁREA PRINCIPAL (WIZARD) */}
-          <div className="flex-1 bg-white p-6 rounded-lg shadow-md min-h-[500px]">
-            
-            {/* ETAPA 1: CATEGORIA E SERVIÇO */}
+          {/* ESQUERDA: FLUXO DE AGENDAMENTO */}
+          <div className="flex-1 bg-white p-6 md:p-8 rounded-3xl shadow-xl min-h-[500px] relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-fuchsia-500 to-purple-600"></div>
+
+            {/* ETAPA 1: SERVIÇOS (COM FOTOS) */}
             {etapa === 1 && (
               <div className="animate-fade-in">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">O que vamos fazer hoje?</h2>
+                <h2 className="text-2xl font-extrabold text-gray-800 mb-6">Escolha o Procedimento</h2>
                 
                 {!categoriaSelecionada ? (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {categorias.map(cat => (
-                      <button 
-                        key={cat.id} 
-                        onClick={() => setCategoriaSelecionada(cat)}
-                        className="group border rounded-xl p-4 hover:border-fuchsia-500 hover:bg-fuchsia-50 transition-all text-center shadow-sm"
-                      >
-                        <img 
-                          src={cat.foto_url || 'https://via.placeholder.com/100?text=?'} 
-                          alt={cat.nome} 
-                          className="w-20 h-20 rounded-full mx-auto mb-3 object-cover bg-gray-100 group-hover:scale-110 transition-transform"
-                        />
-                        <p className="font-bold text-gray-700 group-hover:text-fuchsia-700">{cat.nome}</p>
+                      <button key={cat.id} onClick={() => setCategoriaSelecionada(cat)} className="group bg-gray-50 border border-gray-100 rounded-2xl p-4 hover:border-fuchsia-400 hover:shadow-lg transition-all flex flex-col items-center">
+                        <div className="w-16 h-16 rounded-full overflow-hidden mb-3 border-2 border-white shadow-sm group-hover:scale-110 transition-transform">
+                           <img src={cat.foto_url || 'https://via.placeholder.com/100'} className="w-full h-full object-cover" />
+                        </div>
+                        <span className="font-bold text-gray-700 group-hover:text-fuchsia-700">{cat.nome}</span>
                       </button>
                     ))}
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg text-fuchsia-700">{categoriaSelecionada.nome}</h3>
-                      <button onClick={() => setCategoriaSelecionada(null)} className="text-sm text-gray-500 hover:text-gray-800">Alterar Categoria</button>
-                    </div>
+                    <button onClick={() => setCategoriaSelecionada(null)} className="text-sm text-gray-400 hover:text-fuchsia-600 mb-4 flex items-center gap-1">← Voltar para categorias</button>
+                    <h3 className="text-lg font-bold text-fuchsia-700 mb-4">{categoriaSelecionada.nome}</h3>
+                    
                     <div className="space-y-3">
                       {servicosFiltrados.map(serv => (
                         <div 
                           key={serv.id} 
-                          onClick={() => { setServicoSelecionado(serv); setEtapa(2); }}
-                          className="border p-4 rounded-lg cursor-pointer hover:border-fuchsia-500 hover:bg-fuchsia-50 flex justify-between items-center transition-all group"
+                          onClick={() => selecionarServico(serv)}
+                          className="flex items-center justify-between p-3 border border-gray-100 rounded-2xl hover:border-fuchsia-400 hover:bg-fuchsia-50/50 cursor-pointer transition-all group shadow-sm"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-fuchsia-100 flex items-center justify-center text-fuchsia-600 font-bold group-hover:bg-fuchsia-200">
-                              {serv.nome.charAt(0)}
+                          <div className="flex items-center gap-4">
+                            {/* FOTO DO SERVIÇO */}
+                            <div className="w-14 h-14 rounded-full overflow-hidden border border-gray-200 shrink-0 bg-white">
+                               {serv.foto_url ? (
+                                 <img src={serv.foto_url} className="w-full h-full object-cover" />
+                               ) : (
+                                 <div className="w-full h-full flex items-center justify-center bg-fuchsia-100 text-fuchsia-500 font-bold text-lg">
+                                   {serv.nome.charAt(0)}
+                                 </div>
+                               )}
                             </div>
                             <div>
-                              <p className="font-bold text-gray-800">{serv.nome}</p>
-                              <p className="text-xs text-gray-500">{serv.duracao_minutos} min</p>
+                              <p className="font-bold text-gray-800 group-hover:text-fuchsia-800 transition-colors">{serv.nome}</p>
+                              <p className="text-xs text-gray-500">{serv.duracao_minutos} minutos</p>
                             </div>
                           </div>
-                          <span className="font-bold text-fuchsia-600">R$ {serv.preco.toFixed(2)}</span>
+                          <div className="text-right">
+                             <span className="block font-bold text-fuchsia-600">R$ {serv.preco.toFixed(2)}</span>
+                             <span className="text-xs text-fuchsia-400 font-semibold group-hover:translate-x-1 transition-transform inline-block">Agendar &rarr;</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -518,23 +442,23 @@ function AgendarPage() {
             {/* ETAPA 2: PROFISSIONAL */}
             {etapa === 2 && (
               <div className="animate-fade-in">
-                <button onClick={() => setEtapa(1)} className="text-sm text-gray-400 mb-4 hover:text-gray-600">&larr; Voltar</button>
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">Escolha o Profissional</h2>
+                <button onClick={() => setEtapa(1)} className="text-sm text-gray-400 mb-4 hover:text-gray-600">← Voltar</button>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Quem vai te atender?</h2>
+                <p className="text-gray-500 text-sm mb-6">Selecione o profissional de sua preferência.</p>
                 
                 {isLoadingProfissionais ? (
-                  <div className="text-center py-10 text-gray-500">Carregando equipe...</div>
+                  <div className="py-10 text-center text-gray-400 animate-pulse">Buscando profissionais...</div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {profissionais.map(prof => (
-                      <button 
-                        key={prof.id} 
-                        onClick={() => { setProfissionalSelecionado(prof); setEtapa(3); }}
-                        className="p-4 border rounded-xl hover:border-fuchsia-500 hover:bg-fuchsia-50 transition-all text-center"
-                      >
-                        <div className="w-16 h-16 bg-gray-200 rounded-full mx-auto mb-3 flex items-center justify-center text-xl font-bold text-gray-600">
-                          {prof.nome.charAt(0)}
+                      <button key={prof.id} onClick={() => selecionarProfissional(prof)} className="p-4 border border-gray-100 rounded-2xl hover:border-fuchsia-400 hover:shadow-md transition-all text-center group bg-white">
+                        <div className="w-20 h-20 bg-gray-100 rounded-full mx-auto mb-3 overflow-hidden border-2 border-transparent group-hover:border-fuchsia-300 transition-all">
+                           {/* Se tiver foto do profissional (futuro), poe aqui. Senão usa inicial */}
+                           <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400 group-hover:text-fuchsia-500">
+                             {prof.nome.charAt(0)}
+                           </div>
                         </div>
-                        <p className="font-bold text-gray-700">{prof.nome}</p>
+                        <p className="font-bold text-gray-700 group-hover:text-fuchsia-700">{prof.nome}</p>
                       </button>
                     ))}
                   </div>
@@ -542,173 +466,92 @@ function AgendarPage() {
               </div>
             )}
 
-            {/* ETAPA 3: DATA */}
-            {etapa === 3 && (
+            {/* ETAPA 3 & 4: DATA E HORÁRIO (JUNTOS) */}
+            {(etapa === 3 || etapa === 4) && (
               <div className="animate-fade-in">
-                <button onClick={() => setEtapa(2)} className="text-sm text-gray-400 mb-4 hover:text-gray-600">&larr; Voltar</button>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Qual o melhor dia?</h2>
+                <button onClick={() => setEtapa(2)} className="text-sm text-gray-400 mb-4 hover:text-gray-600">← Voltar</button>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Escolha a Data</h2>
                 
-                <div className="flex justify-center mt-6">
+                <div className="flex justify-center mb-8">
                   <DatePicker
                     selected={dataSelecionada}
                     onChange={(date) => {
                       setDataSelecionada(date);
                       buscarHorariosDisponiveis(date);
-                      setEtapa(4);
+                      setEtapa(4); // Garante que mostre os horários
                     }}
-                    inline locale="pt-BR"
-                    minDate={hoje} maxDate={limiteFuturo}
-                    filterDate={(date) => {
-                      // Filtro dias da semana se configurado
-                      if (servicoSelecionado?.dias_disponiveis?.length > 0) {
-                        return servicoSelecionado.dias_disponiveis.includes(date.getDay());
-                      }
-                      return true;
-                    }}
-                    // Filtro datas específicas se configurado
-                    includeDates={servicoSelecionado?.datas_especificas?.map(d => {
-                       const [y, m, day] = d.split('-');
-                       return new Date(y, m-1, day);
-                    })}
+                    inline
+                    locale="pt-BR"
+                    minDate={hoje}
+                    maxDate={limiteFuturo}
+                    renderDayContents={renderDiaCalendario} // AQUI ESTÁ A MÁGICA DAS BOLINHAS
+                    calendarClassName="border-0 shadow-none"
                   />
                 </div>
-              </div>
-            )}
 
-            {/* ETAPA 4: HORÁRIO */}
-            {etapa === 4 && (
-              <div className="animate-fade-in">
-                <button onClick={() => setEtapa(3)} className="text-sm text-gray-400 mb-4 hover:text-gray-600">&larr; Voltar</button>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Horários Disponíveis</h2>
-                <p className="text-gray-500 mb-6 capitalize">{dataSelecionada.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-
-                {isLoadingHorarios ? (
-                  <div className="text-center py-10"><span className="animate-spin text-2xl">⏳</span></div>
-                ) : horariosDisponiveis.length > 0 ? (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                    {horariosDisponiveis.map(h => (
-                      <button
-                        key={h.getTime()}
-                        onClick={() => {
-                          setHorarioSelecionado(h);
-                          // Aqui adicionamos ao carrinho e vamos para revisão
-                          // O usuário clica no horário e já adiciona
-                          const novoItem = {
-                            tempId: Date.now(),
-                            servico: servicoSelecionado,
-                            profissional: profissionalSelecionado,
-                            data: dataSelecionada,
-                            horario: h
-                          };
-                          setCarrinho(prev => [...prev, novoItem]);
-                          // Limpa seleção temporária
-                          setCategoriaSelecionada(null);
-                          setServicoSelecionado(null);
-                          setProfissionalSelecionado(null);
-                          setHorarioSelecionado(null);
-                          setEtapa(5);
-                        }}
-                        className="py-3 px-2 border rounded-lg hover:bg-fuchsia-600 hover:text-white hover:border-fuchsia-600 transition-colors font-semibold text-gray-700"
-                      >
-                        {h.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center bg-gray-50 p-8 rounded-lg">
-                    <p className="text-gray-500">Sem horários livres nesta data.</p>
-                    <button onClick={() => setEtapa(3)} className="text-fuchsia-600 underline mt-2">Escolher outro dia</button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ETAPA 5: REVISÃO E FINALIZAÇÃO */}
-            {etapa === 5 && (
-              <div className="animate-fade-in space-y-8">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">Revisão do Pedido</h2>
-                  
-                  {/* Lista de Itens no Carrinho (Editável) */}
-                  <div className="space-y-3">
-                    {carrinho.map((item, idx) => (
-                      <div key={item.tempId} className="flex justify-between items-center bg-gray-50 p-4 rounded-lg border border-gray-100">
-                        <div>
-                          <p className="font-bold text-gray-800">{item.servico.nome}</p>
-                          <p className="text-sm text-gray-600">
-                            {item.data.toLocaleDateString('pt-BR')} às {item.horario.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
-                          </p>
-                          <p className="text-xs text-gray-500">{item.profissional.nome}</p>
+                {/* AREA DE HORÁRIOS (Aparece embaixo do calendário) */}
+                <div className={`transition-all duration-500 ${etapa === 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 hidden'}`}>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
+                        Horários para <span className="text-fuchsia-600 capitalize">{dataSelecionada.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric' })}</span>
+                    </h3>
+                    
+                    {isLoadingHorarios ? (
+                        <div className="text-center py-6"><div className="animate-spin h-8 w-8 border-4 border-fuchsia-500 border-t-transparent rounded-full mx-auto"></div></div>
+                    ) : horariosDisponiveis.length > 0 ? (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                            {horariosDisponiveis.map(h => (
+                                <button
+                                    key={h.getTime()}
+                                    onClick={() => selecionarHorario(h)}
+                                    className="py-2 px-1 bg-white border border-fuchsia-200 text-fuchsia-700 font-semibold rounded-lg hover:bg-fuchsia-600 hover:text-white transition-all shadow-sm hover:shadow-md text-sm"
+                                >
+                                    {h.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
+                                </button>
+                            ))}
                         </div>
-                        <button 
-                          onClick={() => removerDoCarrinho(idx)}
-                          className="text-red-500 hover:text-red-700 text-sm font-semibold px-3 py-1"
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                    ) : (
+                        <p className="text-center text-gray-400 py-4 bg-gray-50 rounded-lg">Nenhum horário livre nesta data.</p>
+                    )}
+                </div>
+              </div>
+            )}
 
-                  {/* Botão para Adicionar Mais */}
-                  <div className="mt-4">
-                    <button 
-                      onClick={handleAdicionarMais}
-                      className="text-fuchsia-600 font-bold hover:bg-fuchsia-50 px-4 py-2 rounded-lg border border-dashed border-fuchsia-300 w-full"
-                    >
-                      + Adicionar outro serviço
+            {/* ETAPA 5: CADASTRO E FINALIZAÇÃO */}
+            {etapa === 5 && (
+              <div className="animate-fade-in">
+                <h2 className="text-2xl font-bold text-gray-800 mb-6">Finalizar Agendamento</h2>
+                
+                <div className="bg-fuchsia-50 p-6 rounded-2xl mb-6 border border-fuchsia-100">
+                  <h3 className="font-bold text-fuchsia-800 mb-4">Seus Dados</h3>
+                  <div className="grid gap-4">
+                    <input type="text" value={nome} onChange={e => setNome(e.target.value)} className="w-full p-3 rounded-xl border-none shadow-sm focus:ring-2 focus:ring-fuchsia-400" placeholder="Nome Completo" />
+                    <input type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} className="w-full p-3 rounded-xl border-none shadow-sm focus:ring-2 focus:ring-fuchsia-400" placeholder="WhatsApp (DDD + Número)" />
+                    <input type="date" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)} className="w-full p-3 rounded-xl border-none shadow-sm focus:ring-2 focus:ring-fuchsia-400" />
+                    <div className="flex items-center gap-2 mt-2">
+                        <input type="checkbox" checked={lembrarDados} onChange={e => setLembrarDados(e.target.checked)} className="text-fuchsia-600 rounded focus:ring-fuchsia-500" />
+                        <label className="text-sm text-gray-600">Salvar meus dados para a próxima</label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                    <button onClick={handleAdicionarMais} className="flex-1 py-3 border border-fuchsia-200 text-fuchsia-700 font-bold rounded-xl hover:bg-fuchsia-50 transition">
+                        + Outro Serviço
                     </button>
-                  </div>
+                    <button onClick={finalizarAgendamento} disabled={isSubmitting} className="flex-[2] py-3 bg-fuchsia-600 text-white font-bold rounded-xl hover:bg-fuchsia-700 shadow-lg transition transform hover:-translate-y-1 disabled:opacity-50">
+                        {isSubmitting ? 'Confirmando...' : 'Confirmar Agendamento'}
+                    </button>
                 </div>
-
-                {/* Formulário do Cliente */}
-                <div className="bg-white border-t pt-6">
-                  <h3 className="text-xl font-bold text-gray-800 mb-4">Seus Dados</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Nome Completo</label>
-                      <input type="text" value={nome} onChange={e => setNome(e.target.value)} className="w-full mt-1 p-3 border rounded-lg focus:ring-2 focus:ring-fuchsia-500 outline-none" placeholder="Digite seu nome" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Telefone (WhatsApp)</label>
-                      <input type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} className="w-full mt-1 p-3 border rounded-lg focus:ring-2 focus:ring-fuchsia-500 outline-none" placeholder="(00) 00000-0000" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Data de Nascimento</label>
-                      <input type="date" value={dataNascimento} onChange={e => setDataNascimento(e.target.value)} className="w-full mt-1 p-3 border rounded-lg focus:ring-2 focus:ring-fuchsia-500 outline-none" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" id="lembrar" checked={lembrarDados} onChange={e => setLembrarDados(e.target.checked)} className="text-fuchsia-600 rounded focus:ring-fuchsia-500" />
-                      <label htmlFor="lembrar" className="text-sm text-gray-600">Lembrar meus dados</label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botão Final */}
-                <button
-                  onClick={finalizarAgendamento}
-                  disabled={isSubmitting}
-                  className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg transform transition-all
-                    ${isSubmitting ? 'bg-gray-400 cursor-wait' : 'bg-green-600 hover:bg-green-700 hover:scale-[1.02]'}
-                  `}
-                >
-                  {isSubmitting ? 'Confirmando...' : `Confirmar Agendamento (R$ ${carrinho.reduce((a,b)=>a+b.servico.preco,0).toFixed(2)})`}
-                </button>
               </div>
             )}
 
           </div>
 
-          {/* COLUNA DIREITA (Resumo fixo Desktop) */}
-          <div className="hidden lg:block w-1/3">
+          {/* COLUNA DIREITA (RESUMO) */}
+          <div className="hidden lg:block w-80 shrink-0">
             <ResumoPedido 
               carrinho={carrinho} 
-              itemAtual={{
-                servico: servicoSelecionado,
-                profissional: profissionalSelecionado,
-                data: dataSelecionada,
-                horario: horarioSelecionado
-              }} 
+              itemAtual={{ servico: servicoSelecionado, profissional: profissionalSelecionado, data: dataSelecionada, horario: horarioSelecionado }} 
             />
           </div>
 

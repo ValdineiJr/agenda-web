@@ -8,7 +8,7 @@ html, body, #root {
 @tailwind utilities;
 
 /* =========================================
-   1. CALENDÁRIO DO CLIENTE (Agendar.jsx)
+   1. CALENDÁRIO DO CLIENTE (Agendar.jsx) - UPGRADE VISUAL
    ========================================= */
 
 /* Container Principal */
@@ -16,30 +16,32 @@ html, body, #root {
   width: 100%;
 }
 .react-datepicker {
-  @apply w-full border-none shadow-lg rounded-lg;
+  @apply w-full border-none shadow-xl rounded-2xl font-sans overflow-hidden;
   font-family: inherit;
 }
 
-/* Header (Mês e Ano) */
+/* Header (Mês e Ano) - Visual Limpo */
 .react-datepicker__header {
-  @apply bg-fuchsia-600 rounded-t-lg;
-  border-bottom: none;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+  @apply bg-white border-b border-gray-100 pt-4 pb-2 rounded-t-2xl;
 }
 
-.react-datepicker__current-month,
+.react-datepicker__current-month {
+  @apply text-fuchsia-800 font-bold text-lg capitalize mb-2;
+}
+
 .react-datepicker__day-name {
-  @apply text-white font-semibold;
+  @apply text-gray-400 font-semibold text-xs uppercase tracking-wider w-10;
 }
 
 /* Setas de Navegação */
 .react-datepicker__navigation-icon::before {
-  @apply border-white;
+  @apply border-fuchsia-600; /* Cor rosa para destaque */
+  width: 8px;
+  height: 8px;
   border-width: 2px 2px 0 0;
 }
 .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
-  @apply border-gray-200;
+  @apply border-fuchsia-800;
 }
 
 /* Container dos dias */
@@ -53,27 +55,29 @@ html, body, #root {
   @apply flex justify-around;
 }
 
-/* Dias */
+/* Dias (Bolinhas) */
 .react-datepicker__day {
-  @apply rounded-full w-10 h-10 flex items-center justify-center;
-  transition: all 0.2s ease;
+  @apply w-10 h-10 flex items-center justify-center rounded-full text-sm font-medium transition-all relative;
+  margin: 0.2rem;
 }
 
-.react-datepicker__day:hover {
-  @apply bg-fuchsia-100;
+/* Dia Comum (Interativo) */
+.react-datepicker__day:not(.react-datepicker__day--disabled):not(.react-datepicker__day--selected) {
+  @apply text-gray-700 hover:bg-fuchsia-50 hover:text-fuchsia-700;
 }
 
 /* Dia Selecionado */
 .react-datepicker__day--selected {
-  @apply bg-fuchsia-600 text-white;
+  @apply bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-200;
+  font-weight: bold;
 }
 .react-datepicker__day--selected:hover {
   @apply bg-fuchsia-700;
 }
 
-/* Dia Desabilitado (passado ou futuro) */
+/* Dia Desabilitado */
 .react-datepicker__day--disabled {
-  @apply text-gray-300;
+  @apply text-gray-300 cursor-not-allowed opacity-50;
 }
 .react-datepicker__day--disabled:hover {
   @apply bg-transparent;
@@ -81,13 +85,18 @@ html, body, #root {
 
 /* Dia "Hoje" */
 .react-datepicker__day--today {
-  @apply font-bold border-2 border-fuchsia-600;
+  @apply border border-fuchsia-200 text-fuchsia-700 font-bold;
+}
+
+/* --- BOLINHA INDICADORA DE DISPONIBILIDADE (NOVO) --- */
+.day-indicator-dot {
+  @apply absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-green-500 rounded-full;
 }
 
 
 /* =========================================
    2. AGENDA ADMINISTRATIVA (AdminAgenda.jsx)
-   Moderno & Com suporte a Tooltip (Hover)
+   Mantendo as correções de Tooltip e Mês
    ========================================= */
 
 /* Container Geral */
@@ -120,11 +129,18 @@ html, body, #root {
   @apply py-3 text-xs font-bold uppercase tracking-widest text-gray-400 border-b border-gray-100;
 }
 
-/* Células e Grade */
+/* --- CORREÇÃO CRÍTICA PARA O TOOLTIP NO MÊS --- */
+/* Força as linhas do mês a não cortarem o conteúdo que vaza (o tooltip) */
 .rbc-month-view {
   @apply rounded-xl border-none shadow-lg bg-white;
-  /* overflow: hidden removido para permitir tooltip */
+  overflow: visible !important; 
 }
+.rbc-month-row, .rbc-row, .rbc-row-content {
+  overflow: visible !important;
+  z-index: auto !important; /* Permite que o z-index do tooltip funcione */
+}
+
+/* Células e Grade */
 .rbc-day-bg {
   @apply border-l border-gray-50;
 }
@@ -132,7 +148,7 @@ html, body, #root {
   @apply bg-gray-50/50;
 }
 .rbc-today {
-  @apply bg-fuchsia-50/60; /* Destaque sutil para hoje */
+  @apply bg-fuchsia-50/60;
 }
 
 /* Dia do Mês (Número) */
@@ -143,24 +159,24 @@ html, body, #root {
   @apply text-fuchsia-600 font-extrabold text-lg;
 }
 
-/* --- TRUQUE PARA O TOOLTIP FUNCIONAR (Sobrescrevendo padrão da biblioteca) --- */
-/* Isso permite que o card flutue por cima dos outros dias sem ser cortado */
-
+/* --- CORREÇÃO CRÍTICA PARA O EVENTO (Dia e Mês) --- */
 .rbc-event {
-  @apply bg-transparent p-0 border-none outline-none;
-  overflow: visible !important; /* CRUCIAL: Deixa o tooltip sair da caixinha */
+  background-color: transparent !important; /* Remove fundo azul padrão */
+  border: none !important;                  /* Remove borda padrão */
+  padding: 0 !important;                    /* Remove padding padrão */
+  outline: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;             /* Permite o tooltip sair */
 }
 
-.rbc-row-segment, 
-.rbc-month-row, 
-.rbc-row-content {
-  overflow: visible !important; /* Garante que a linha não corte o conteúdo */
-  z-index: auto !important;
+/* Garante que o evento focado não ganhe contorno estranho */
+.rbc-event:focus, .rbc-event-content {
+  outline: none !important;
 }
 
-/* Remove o foco padrão azul feio */
-.rbc-event:focus {
-  outline: none;
+/* Garante que, ao passar o mouse, o evento fique por cima dos vizinhos */
+.rbc-event:hover {
+  z-index: 50 !important;
 }
 
 
@@ -192,8 +208,8 @@ html, body, #root {
   outline: none;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   max-height: 90vh;
-  overflow-y: auto; /* Permite rolar se o modal for alto */
-  overflow-x: visible; /* Tenta evitar cortes laterais */
+  overflow-y: auto;
+  overflow-x: visible;
   animation: modalPop 0.3s ease-out forwards;
 }
 
@@ -202,7 +218,7 @@ html, body, #root {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Scrollbar Personalizada e Bonita */
+/* Scrollbar Personalizada */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -253,10 +269,16 @@ html, body, #root {
   animation-delay: 4s;
 }
 
-/* Utilitário de Z-Index alto */
-.z-10 {
-  z-index: 10;
+/* --- NOVA ANIMAÇÃO: BOTÃO PULSANDO FORTE (WHATSAPP) --- */
+@keyframes pulse-strong {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  50% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
 }
-.z-50 {
-  z-index: 50;
+
+.animate-pulse-strong {
+  animation: pulse-strong 2s infinite;
 }
+
+/* Utilitários de Z-Index */
+.z-10 { z-index: 10; }
+.z-50 { z-index: 50; }
