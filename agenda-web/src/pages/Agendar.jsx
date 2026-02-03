@@ -172,7 +172,7 @@ function AgendarPage() {
     
     const loadProfs = async () => {
       setIsLoadingProfissionais(true);
-      // CORREÇÃO: Removido 'foto_url' do select para evitar erro 400 se a coluna não existir
+      // Removido 'foto_url' do select para evitar erro se a coluna não existir
       const { data, error } = await supabase
         .from('profissionais_servicos')
         .select('profissionais ( id, nome )') 
@@ -204,7 +204,6 @@ function AgendarPage() {
       const diaDaSemana = dataAlvo.getDay();
       const dataISO = dataAlvo.toISOString().split('T')[0];
 
-      // Validação rápida de dia (para evitar chamadas inúteis)
       let diaValido = true;
       if (servicoSelecionado.datas_especificas?.length > 0) {
         if (!servicoSelecionado.datas_especificas.includes(dataISO)) diaValido = false;
@@ -223,7 +222,6 @@ function AgendarPage() {
 
       if (!jornada) { setIsLoadingHorarios(false); return; }
 
-      // Verifica conflitos
       const inicioDia = new Date(dataAlvo); inicioDia.setHours(0,0,0,0);
       const fimDia = new Date(dataAlvo); fimDia.setHours(23,59,59,999);
 
@@ -267,9 +265,8 @@ function AgendarPage() {
     }
   }
 
-  // --- RENDERIZADOR DO CALENDÁRIO (BOLINHAS VERDES) ---
+  // --- RENDERIZADOR DO CALENDÁRIO ---
   const renderDiaCalendario = (day, date) => {
-    // Lógica visual para mostrar bolinha verde se o dia for "potencialmente" válido
     let temVagaVisual = false;
     if (servicoSelecionado) {
         const dataISO = date.toISOString().split('T')[0];
@@ -280,12 +277,10 @@ function AgendarPage() {
         } else if (servicoSelecionado.dias_disponiveis?.length > 0) {
             temVagaVisual = servicoSelecionado.dias_disponiveis.includes(diaSemana);
         } else {
-            // Se não tiver restrição, assume que todo dia (exceto passado) pode ter
             temVagaVisual = true; 
         }
     }
     
-    // Não mostra bolinha no passado
     if (date < new Date(new Date().setHours(0,0,0,0))) temVagaVisual = false;
 
     return (
@@ -319,6 +314,15 @@ function AgendarPage() {
     novoCarrinho.splice(index, 1);
     setCarrinho(novoCarrinho);
     if (novoCarrinho.length === 0) setEtapa(1);
+  };
+
+  // --- FUNÇÃO QUE FALTAVA (RECRIADA) ---
+  const handleAdicionarMais = () => {
+    if (carrinho.length >= 3) {
+      alert("Para garantir a qualidade, permitimos agendar no máximo 3 serviços por vez.");
+      return;
+    }
+    setEtapa(1); // Volta para escolher outro serviço
   };
 
   const finalizarAgendamento = async () => {
