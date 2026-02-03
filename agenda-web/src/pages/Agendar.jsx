@@ -11,7 +11,7 @@ registerLocale('pt-BR', ptBR);
 
 // --- COMPONENTE DE SUCESSO (Atualizado para Múltiplos Itens) ---
 function TelaSucesso({ itensAgendados, cliente, onNovoAgendamento }) {
-  const numeroWhatsapp = '5519993562075'; 
+  const numeroWhatsapp = '5519988136946'; 
   
   // Monta mensagem detalhada para o WhatsApp
   let mensagemWhatsapp = `Olá! Acabei de realizar agendamentos no site:\n`;

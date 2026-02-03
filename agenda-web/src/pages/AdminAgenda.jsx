@@ -56,26 +56,18 @@ const EventoPersonalizado = ({ event }) => {
   const bgClass = isEmAtendimento ? 'bg-amber-100 border-amber-500 text-amber-900' : 'bg-fuchsia-100 border-fuchsia-500 text-fuchsia-900';
   
   return (
-    // Removido w-full para não quebrar a visualização de Dia/Semana
     <div className="relative group h-full text-xs font-sans">
-      
-      {/* --- CARD PRINCIPAL (VISUALIZAÇÃO NORMAL) --- */}
       <div className={`h-full w-full rounded border-l-4 p-1 px-2 shadow-sm transition-all hover:brightness-95 ${bgClass} overflow-hidden flex flex-col justify-start`}>
         <div className="flex justify-between items-center mb-0.5">
            <span className="font-bold">{format(event.start, 'HH:mm')}</span>
            {isEmAtendimento && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="Em Atendimento"></span>}
         </div>
-        {/* Adicionado truncate para não quebrar linha em visualização pequena */}
         <div className="font-semibold truncate">{event.resource.servicos?.nome}</div>
         <div className="font-light truncate opacity-80">{event.resource.nome_cliente.split(' ')[0]}</div>
       </div>
 
-      {/* --- TOOLTIP (SOBREPOSIÇÃO MÁXIMA) --- */}
       <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-64 bg-white p-4 rounded-xl shadow-2xl border border-gray-200 animate-fade-in pointer-events-none">
-         
-         {/* Triângulo (Seta) */}
          <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-200"></div>
-         
          <div className="relative z-50 text-left">
             <div className="flex items-center gap-3 mb-3 border-b border-gray-100 pb-2">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg uppercase shrink-0 ${isEmAtendimento ? 'bg-amber-500' : 'bg-fuchsia-600'}`}>
@@ -106,7 +98,7 @@ const EventoPersonalizado = ({ event }) => {
 function AdminAgenda() {
   const { profile, loading: authLoading } = useAuth(); 
   
-  // --- States de Dados ---
+  // States
   const [agendamentosRawState, setAgendamentosRawState] = useState([]); 
   const [agendamentosAgrupados, setAgendamentosAgrupados] = useState({});
   const [eventosCalendario, setEventosCalendario] = useState([]);
@@ -114,7 +106,7 @@ function AdminAgenda() {
   const [finalizadosAgrupados, setFinalizadosAgrupados] = useState({});
   const [proximosAgendamentos, setProximosAgendamentos] = useState([]);
 
-  // --- States de Controle ---
+  // Controle
   const [showCancelados, setShowCancelados] = useState(false);
   const [showFinalizados, setShowFinalizados] = useState(false);
   const [totalCancelados, setTotalCancelados] = useState(0);
@@ -124,10 +116,9 @@ function AdminAgenda() {
   const [viewMode, setViewMode] = useState('calendar'); 
   const [filtroProfissionalId, setFiltroProfissionalId] = useState(''); 
   
-  // --- Bulk Actions ---
   const [selectedBulkIds, setSelectedBulkIds] = useState([]);
 
-  // --- Modal States ---
+  // Modal
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [modalMode, setModalMode] = useState('new'); 
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -156,7 +147,7 @@ function AdminAgenda() {
   useEffect(() => { if (!authLoading && profile) fetchModalData(); }, [authLoading, profile]);
   useEffect(() => { if (!authLoading && profile) fetchAgendamentos(); }, [authLoading, profile, filtroProfissionalId]); 
 
-  // --- FUNÇÕES DE BUSCA ---
+  // --- BUSCAS ---
   async function fetchModalData() {
     const { data: servicosData } = await supabase.from('servicos').select('id, nome, duracao_minutos');
     if (servicosData) setAllServicos(servicosData);
@@ -217,7 +208,7 @@ function AdminAgenda() {
     setLoading(false);
   }
 
-  // --- WHATSAPP ---
+  // --- AÇÕES ---
   const handleEnviarWhatsApp = (agendamento, tipo) => {
     const telefone = agendamento.telefone_cliente?.replace(/[^0-9]/g, '');
     if (!telefone) return alert("Sem telefone.");
@@ -239,7 +230,6 @@ function AdminAgenda() {
     if (error) alert('Erro ao atualizar status.'); else fetchAgendamentos();
   };
 
-  // --- BULK ACTION ---
   const toggleBulkSelect = (id) => {
     setSelectedBulkIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
@@ -255,7 +245,6 @@ function AdminAgenda() {
     setLoading(false);
   };
 
-  // --- FUNÇÕES "NOVO SERVIÇO" ---
   const handleAdicionarExtraHoje = () => {
     setModalMode('new');
     setSelectedEvent({ start: new Date(), end: new Date() });
@@ -294,196 +283,83 @@ function AdminAgenda() {
   
   const closeModal = () => { setModalIsOpen(false); setSelectedEvent(null); setShowCancelOptions(false); };
 
+  // --- FUNÇÃO DE SALVAR BLINDADA ---
   const handleModalSave = async () => {
-    setIsSavingModal(true); setModalError(null);
-    if (!modalServicoId || !modalProfissionalId || !modalNome) { setModalError('Preencha serviço, profissional e nome.'); setIsSavingModal(false); return; }
-    
-    const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
-    let ini;
-    if (showRemarcar && novoHorarioSelecionado) ini = new Date(novoHorarioSelecionado);
-    else if (modalMode === 'new') {
-        ini = selectedEvent?.start ? new Date(selectedEvent.start) : new Date();
+    // 1. Validação
+    if (!modalServicoId || !modalProfissionalId || !modalNome) { 
+        setModalError('Preencha serviço, profissional e nome.'); 
+        return; 
     }
-    else ini = new Date(selectedEvent.data_hora_inicio);
-    
-    const fim = new Date(ini.getTime() + servico.duracao_minutos * 60000);
-    const payload = { servico_id: servico.id, profissional_id: parseInt(modalProfissionalId), nome_cliente: modalNome, email_cliente: modalEmail, telefone_cliente: modalTelefone, data_hora_inicio: ini.toISOString(), data_hora_fim: fim.toISOString(), status: 'confirmado' };
 
-    let errReq;
-    if (modalMode === 'new') { const { error } = await supabase.from('agendamentos').insert(payload); errReq = error; } 
-    else { const { error } = await supabase.from('agendamentos').update(payload).eq('id', selectedEvent.id); errReq = error; }
+    setIsSavingModal(true); // Trava o botão
+    setModalError(null);
 
-    if (errReq) { setModalError(errReq.message); setIsSavingModal(false); } 
-    else { setIsSavingModal(false); closeModal(); fetchAgendamentos(); }
+    try {
+        const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
+        let ini;
+        if (showRemarcar && novoHorarioSelecionado) ini = new Date(novoHorarioSelecionado);
+        else if (modalMode === 'new') {
+            ini = selectedEvent?.start ? new Date(selectedEvent.start) : new Date();
+        }
+        else ini = new Date(selectedEvent.data_hora_inicio);
+        
+        const fim = new Date(ini.getTime() + servico.duracao_minutos * 60000);
+        const payload = { servico_id: servico.id, profissional_id: parseInt(modalProfissionalId), nome_cliente: modalNome, email_cliente: modalEmail, telefone_cliente: modalTelefone, data_hora_inicio: ini.toISOString(), data_hora_fim: fim.toISOString(), status: 'confirmado' };
+
+        let errReq;
+        if (modalMode === 'new') { 
+            const { error } = await supabase.from('agendamentos').insert(payload); 
+            errReq = error; 
+        } else { 
+            const { error } = await supabase.from('agendamentos').update(payload).eq('id', selectedEvent.id); 
+            errReq = error; 
+        }
+
+        if (errReq) throw errReq;
+        
+        // Sucesso
+        closeModal(); 
+        fetchAgendamentos();
+
+    } catch (error) {
+        console.error("Erro ao salvar:", error);
+        setModalError(error.message || "Erro ao salvar. Verifique sua conexão.");
+    } finally {
+        // SEGURANÇA: Destrava o botão aconteça o que acontecer
+        setIsSavingModal(false);
+    }
   };
 
   const handleModalCancel = async () => {
     if (profile.role !== 'admin' && profile.id !== selectedEvent.profissional_id) { setModalError('Sem permissão.'); return; }
     if (!showCancelOptions) { setShowCancelOptions(true); return; }
+    
     setIsSavingModal(true); 
-    const { error } = await supabase.from('agendamentos').update({ status: 'cancelado', cancelamento_motivo: adminCancelReason }).eq('id', selectedEvent.id);
-    if (error) { setModalError(error.message); setIsSavingModal(false); } 
-    else {
-      setIsSavingModal(false); 
-      const nome = selectedEvent.nome_cliente.split(' ')[0];
-      const servico = selectedEvent.servicos?.nome || 'serviço';
-      const msg = `Olá ${nome}. Infelizmente tivemos que cancelar seu agendamento de ${servico}. Motivo: ${adminCancelReason}`;
-      const link = `https://wa.me/55${selectedEvent.telefone_cliente.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`;
-      window.open(link, '_blank');
-      closeModal(); fetchAgendamentos();
+    try {
+        const { error } = await supabase.from('agendamentos').update({ status: 'cancelado', cancelamento_motivo: adminCancelReason }).eq('id', selectedEvent.id);
+        if (error) throw error;
+
+        const nome = selectedEvent.nome_cliente.split(' ')[0];
+        const servico = selectedEvent.servicos?.nome || 'serviço';
+        const msg = `Olá ${nome}. Infelizmente tivemos que cancelar seu agendamento de ${servico}. Motivo: ${adminCancelReason}`;
+        const link = `https://wa.me/55${selectedEvent.telefone_cliente.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`;
+        window.open(link, '_blank');
+        closeModal(); 
+        fetchAgendamentos();
+    } catch (error) {
+        setModalError(error.message);
+    } finally {
+        setIsSavingModal(false);
     }
   };
 
-  const buscarHorariosParaRemarcar = async (data) => {
-    setLoadingNovosHorarios(true); setNovosHorarios([]); setNovoHorarioSelecionado(null); setNovaData(data);
-    const profId = parseInt(modalProfissionalId); const servId = parseInt(modalServicoId);
-    if (!profId || !servId) { setModalError("Selecione serviço e profissional."); setLoadingNovosHorarios(false); return; }
-    
-    const servico = allServicos.find(s => s.id === servId);
-    const { data: trab } = await supabase.from('horarios_trabalho').select('hora_inicio, hora_fim').eq('dia_semana', data.getDay()).eq('profissional_id', profId).single();
-    if (!trab) { setLoadingNovosHorarios(false); return; }
-    
-    const dIni = new Date(data); dIni.setHours(0,0,0,0); const dFim = new Date(data); dFim.setHours(23,59,59);
-    const { data: ags } = await supabase.from('agendamentos').select('data_hora_inicio, data_hora_fim').gte('data_hora_inicio', dIni.toISOString()).lte('data_hora_fim', dFim.toISOString()).eq('profissional_id', profId).neq('status', 'cancelado').neq('id', selectedEvent?.id || 0);
-    
-    const slots = [];
-    const [hI, mI] = trab.hora_inicio.split(':'); const [hF, mF] = trab.hora_fim.split(':');
-    let curr = new Date(data); curr.setHours(hI, mI, 0, 0); const limit = new Date(data); limit.setHours(hF, mF, 0, 0);
-    
-    while (curr < limit) {
-      const slotEnd = new Date(curr.getTime() + servico.duracao_minutos * 60000);
-      if (slotEnd > limit) break;
-      if (curr > new Date()) {
-        if (!ags?.some(a => { const ai=new Date(a.data_hora_inicio), af=new Date(a.data_hora_fim); return (curr>=ai && curr<af) || (slotEnd>ai && slotEnd<=af); })) slots.push(new Date(curr));
-      }
-      curr = new Date(curr.getTime() + servico.duracao_minutos * 60000);
-    }
-    setNovosHorarios(slots); setLoadingNovosHorarios(false);
-  };
-
-  const renderListaHoje = () => {
-    const hojeStr = new Date().toLocaleDateString('pt-BR');
-    const agendamentosHoje = agendamentosRawState.filter(ag => {
-        const dataAg = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
-        const isHoje = dataAg === hojeStr;
-        const isAtivo = ag.status === 'confirmado' || ag.status === 'em_atendimento';
-        if (filtroProfissionalId) return isHoje && isAtivo && ag.profissional_id == filtroProfissionalId;
-        return isHoje && isAtivo;
-    });
-
-    const porProfissional = agendamentosHoje.reduce((acc, ag) => {
-        const nomeProf = ag.profissionais?.nome || 'Sem Profissional';
-        if (!acc[nomeProf]) acc[nomeProf] = [];
-        acc[nomeProf].push(ag);
-        return acc;
-    }, {});
-
-    if (agendamentosHoje.length === 0) {
-        return (
-            <div className="text-center p-10 bg-white rounded-xl shadow-sm border border-gray-100">
-                <p className="text-gray-500 mb-4">Nenhum agendamento pendente para hoje.</p>
-                <button onClick={handleAdicionarExtraHoje} className="bg-fuchsia-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-fuchsia-700 transition">
-                    + Incluir Serviço Extra (Hoje)
-                </button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-8 animate-fade-in">
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-fuchsia-100">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-800">Agendamentos de Hoje</h2>
-                    <p className="text-sm text-gray-500">{hojeStr}</p>
-                </div>
-                <div className="flex gap-3">
-                    <button onClick={handleAdicionarExtraHoje} className="bg-white border border-fuchsia-600 text-fuchsia-600 px-4 py-2 rounded-lg font-bold hover:bg-fuchsia-50 transition">
-                        + Serviço Extra (Novo)
-                    </button>
-                    {selectedBulkIds.length > 0 && (
-                        <button onClick={handleBulkFinish} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 transition shadow-md animate-pulse">
-                            ✅ Finalizar Selecionados ({selectedBulkIds.length})
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {Object.keys(porProfissional).map(profNome => (
-                <div key={profNome} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
-                    <div className="bg-fuchsia-50 p-4 border-b border-fuchsia-100 flex justify-between items-center">
-                        <h3 className="font-bold text-fuchsia-800">{profNome}</h3>
-                        <span className="text-xs font-semibold bg-white text-fuchsia-600 px-2 py-1 rounded-full border border-fuchsia-200">
-                            {porProfissional[profNome].length} clientes
-                        </span>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                        {porProfissional[profNome].map(ag => (
-                            <div key={ag.id} className="p-4 flex flex-col md:flex-row items-center gap-4 hover:bg-gray-50 transition">
-                                <input 
-                                    type="checkbox" 
-                                    checked={selectedBulkIds.includes(ag.id)}
-                                    onChange={() => toggleBulkSelect(ag.id)}
-                                    className="w-5 h-5 text-fuchsia-600 rounded focus:ring-fuchsia-500 cursor-pointer"
-                                />
-                                <div className="min-w-[80px] text-center">
-                                    <span className="block text-lg font-bold text-gray-700">{formatarHora(ag.data_hora_inicio)}</span>
-                                    {ag.status === 'em_atendimento' && (
-                                        <span className="text-[10px] uppercase font-bold text-amber-600 bg-amber-100 px-1 rounded">Em Andamento</span>
-                                    )}
-                                </div>
-                                <div className="flex-1 text-center md:text-left">
-                                    <p className="font-bold text-gray-800">{ag.nome_cliente}</p>
-                                    <p className="text-sm text-gray-500">{ag.servicos?.nome}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button 
-                                        onClick={() => handleAdicionarServicoParaCliente(ag)}
-                                        className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm font-bold hover:bg-purple-200 transition"
-                                        title="Adicionar Serviço Extra para este cliente"
-                                    >
-                                        + Serviço
-                                    </button>
-
-                                    <button 
-                                        onClick={() => handleEnviarWhatsApp(ag, 'contato')}
-                                        className="p-2 bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition"
-                                        title="Chamar no WhatsApp"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                                    </button>
-                                    
-                                    <button 
-                                        onClick={() => handleSelectEvent({ resource: ag })}
-                                        className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition"
-                                    >
-                                        Editar
-                                    </button>
-
-                                    <button 
-                                        onClick={() => handleUpdateStatus(ag.id, 'finalizado')}
-                                        className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition shadow-sm"
-                                    >
-                                        Finalizar
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-  };
-
-  // --- CONFIGURAÇÃO CHAVE PARA O CALENDÁRIO ---
   const eventStyleGetter = (event, start, end, isSelected) => {
     return {
       style: {
-        // Garante que o container do evento seja transparente para mostrar nosso Card
         backgroundColor: 'transparent',
         border: 'none',
         padding: 0,
-        overflow: 'visible', // Permite o tooltip vazar
+        overflow: 'visible',
         zIndex: 20
       }
     };
@@ -496,8 +372,6 @@ function AdminAgenda() {
       const [da, ma, aa] = a.split('/'); const [db, mb, ab] = b.split('/');
       return new Date(`${aa}-${ma}-${da}`) - new Date(`${ab}-${mb}-${db}`);
   });
-  const diasOrdenadosFinalizados = Object.keys(finalizadosAgrupados);
-  const diasOrdenadosCancelados = Object.keys(canceladosAgrupados);
 
   return (
     <div className="max-w-7xl mx-auto pb-10">
@@ -603,11 +477,8 @@ function AdminAgenda() {
               selectable={true}
               onSelectSlot={handleSelectSlot} 
               onSelectEvent={handleSelectEvent}
-              
-              // --- CONFIGURAÇÃO CHAVE PARA CORRIGIR O MÊS ---
               eventPropGetter={eventStyleGetter}
               components={{ event: EventoPersonalizado }}
-              
               messages={messages}
               culture="pt-BR"
               tooltipAccessor={null} 

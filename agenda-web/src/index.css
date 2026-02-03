@@ -11,6 +11,7 @@ html, body, #root {
    1. CALENDÁRIO DO CLIENTE (Agendar.jsx)
    ========================================= */
 
+/* Container Principal */
 .react-datepicker-wrapper {
   width: 100%;
 }
@@ -70,7 +71,7 @@ html, body, #root {
   @apply bg-fuchsia-700;
 }
 
-/* Dia Desabilitado */
+/* Dia Desabilitado (passado ou futuro) */
 .react-datepicker__day--disabled {
   @apply text-gray-300;
 }
@@ -86,7 +87,7 @@ html, body, #root {
 
 /* =========================================
    2. AGENDA ADMINISTRATIVA (AdminAgenda.jsx)
-   Correções para Mês (Tooltip) e Dia (Layout)
+   Moderno & Com suporte a Tooltip (Hover)
    ========================================= */
 
 /* Container Geral */
@@ -119,18 +120,11 @@ html, body, #root {
   @apply py-3 text-xs font-bold uppercase tracking-widest text-gray-400 border-b border-gray-100;
 }
 
-/* --- CORREÇÃO CRÍTICA PARA O TOOLTIP NO MÊS --- */
-/* Força as linhas do mês a não cortarem o conteúdo que vaza (o tooltip) */
+/* Células e Grade */
 .rbc-month-view {
   @apply rounded-xl border-none shadow-lg bg-white;
-  overflow: visible !important; 
+  /* overflow: hidden removido para permitir tooltip */
 }
-.rbc-month-row, .rbc-row, .rbc-row-content {
-  overflow: visible !important;
-  z-index: auto !important; /* Permite que o z-index do tooltip funcione */
-}
-
-/* Células e Grade */
 .rbc-day-bg {
   @apply border-l border-gray-50;
 }
@@ -138,7 +132,7 @@ html, body, #root {
   @apply bg-gray-50/50;
 }
 .rbc-today {
-  @apply bg-fuchsia-50/60;
+  @apply bg-fuchsia-50/60; /* Destaque sutil para hoje */
 }
 
 /* Dia do Mês (Número) */
@@ -149,24 +143,24 @@ html, body, #root {
   @apply text-fuchsia-600 font-extrabold text-lg;
 }
 
-/* --- CORREÇÃO CRÍTICA PARA O EVENTO (Dia e Mês) --- */
+/* --- TRUQUE PARA O TOOLTIP FUNCIONAR (Sobrescrevendo padrão da biblioteca) --- */
+/* Isso permite que o card flutue por cima dos outros dias sem ser cortado */
+
 .rbc-event {
-  background-color: transparent !important; /* Remove fundo azul padrão */
-  border: none !important;                  /* Remove borda padrão */
-  padding: 0 !important;                    /* Remove padding padrão */
-  outline: none !important;
-  box-shadow: none !important;
-  overflow: visible !important;             /* Permite o tooltip sair */
+  @apply bg-transparent p-0 border-none outline-none;
+  overflow: visible !important; /* CRUCIAL: Deixa o tooltip sair da caixinha */
 }
 
-/* Garante que o evento focado não ganhe contorno estranho */
-.rbc-event:focus, .rbc-event-content {
-  outline: none !important;
+.rbc-row-segment, 
+.rbc-month-row, 
+.rbc-row-content {
+  overflow: visible !important; /* Garante que a linha não corte o conteúdo */
+  z-index: auto !important;
 }
 
-/* Garante que, ao passar o mouse, o evento fique por cima dos vizinhos */
-.rbc-event:hover {
-  z-index: 50 !important;
+/* Remove o foco padrão azul feio */
+.rbc-event:focus {
+  outline: none;
 }
 
 
@@ -180,8 +174,8 @@ html, body, #root {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur-sm;
+  background-color: rgba(0, 0, 0, 0.6); /* Fundo escuro semi-transparente */
+  backdrop-filter: blur-sm; /* Efeito de desfoque no fundo */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -198,8 +192,8 @@ html, body, #root {
   outline: none;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   max-height: 90vh;
-  overflow-y: auto;
-  overflow-x: visible;
+  overflow-y: auto; /* Permite rolar se o modal for alto */
+  overflow-x: visible; /* Tenta evitar cortes laterais */
   animation: modalPop 0.3s ease-out forwards;
 }
 
@@ -208,7 +202,7 @@ html, body, #root {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Scrollbar Personalizada */
+/* Scrollbar Personalizada e Bonita */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -259,6 +253,10 @@ html, body, #root {
   animation-delay: 4s;
 }
 
-/* Utilitários de Z-Index */
-.z-10 { z-index: 10; }
-.z-50 { z-index: 50; }
+/* Utilitário de Z-Index alto */
+.z-10 {
+  z-index: 10;
+}
+.z-50 {
+  z-index: 50;
+}

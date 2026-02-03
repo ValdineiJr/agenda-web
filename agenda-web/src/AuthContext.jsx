@@ -10,28 +10,23 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // --- 1. CONFIGURAÇÃO DE TEMPO (AUMENTADO) ---
-  // Aumentei para 4 HORAS (14400000 ms) para evitar que a recepção
-  // seja deslogada durante o expediente ou horário de almoço.
+  // Tempo aumentado para manter a sessão (4 horas)
   const TEMPO_INATIVIDADE = 4 * 60 * 60 * 1000; 
-
-  // Controle de "throttle" para não verificar foco toda hora
   const lastCheckTime = useRef(0);
 
-  // --- 2. FUNÇÃO DE LIMPEZA TOTAL (Logout Forçado) ---
   const realizarLimpezaTotal = async () => {
-    console.warn("Sessão expirada ou inválida: Renovando sistema...");
+    console.warn("Limpando sessão e reiniciando...");
     try {
         await supabase.auth.signOut();
     } catch (e) {
-        console.error("Erro ao deslogar (ignorado):", e);
+        console.error("Erro logout silencioso:", e);
     }
     localStorage.clear();
     sessionStorage.clear();
-    window.location.href = '/login'; // Força recarregamento real
+    // Força recarregamento limpo do servidor
+    window.location.href = '/login'; 
   };
 
-  // --- 3. BUSCAR PERFIL (Com seu Fallback de Segurança) ---
   const fetchProfile = async (user) => {
     try {
       const { data, error } = await supabase
@@ -41,17 +36,10 @@ export const AuthProvider = ({ children }) => {
         .single();
       
       if (error) {
-        console.warn('Tabela profiles inacessível, usando fallback de admin.');
-        // Mantendo sua lógica exata de segurança:
+        // Fallback de segurança para não travar se a tabela falhar
         const emailsAdmin = ['valdinei@seuemail.com', user.email]; 
-        
         if (emailsAdmin.includes(user.email)) {
-             setProfile({ 
-               id: user.id, 
-               role: 'admin', 
-               nome: user.email.split('@')[0],
-               avatar: null 
-             });
+             setProfile({ id: user.id, role: 'admin', nome: user.email.split('@')[0], avatar: null });
         } else {
              setProfile(null);
         }
@@ -59,8 +47,7 @@ export const AuthProvider = ({ children }) => {
         setProfile(data);
       }
     } catch (error) {
-      console.error('Erro crítico no perfil:', error);
-      // Fallback final para não travar a tela
+      console.error('Erro crítico perfil:', error);
       setProfile({ role: 'admin', nome: 'Admin Recuperado' });
     }
   };
@@ -70,46 +57,50 @@ export const AuthProvider = ({ children }) => {
     let inatividadeTimer;
     let keepAliveInterval;
 
-    // --- 4. MONITOR DE INATIVIDADE ---
+    // --- 1. MONITOR DE INATIVIDADE ---
     const resetarTimerInatividade = () => {
         if (!mounted) return;
         if (inatividadeTimer) clearTimeout(inatividadeTimer);
-        
         inatividadeTimer = setTimeout(() => {
             realizarLimpezaTotal();
         }, TEMPO_INATIVIDADE);
     };
 
-    // --- 5. SISTEMA "KEEP-ALIVE" (CORREÇÃO DO TRAVAMENTO) ---
-    // A cada 4 minutos, faz uma checagem silenciosa.
-    // Isso impede que o navegador "congele" a conexão com o banco quando a aba está em 2º plano.
+    // --- 2. SISTEMA KEEP-ALIVE (Evita queda de conexão) ---
     const startKeepAlive = () => {
         keepAliveInterval = setInterval(async () => {
             if (!mounted) return;
             const { data, error } = await supabase.auth.getSession();
-            
-            if (error || !data.session) {
-                console.warn("Sessão perdida no Keep-Alive.");
-                // Não força logout aqui para não interromper o usuário se for falha de rede temporária
-            } else if (JSON.stringify(session) !== JSON.stringify(data.session)) {
-                // Atualiza token silenciosamente se mudou
+            // Se a sessão ainda existe, renova o estado local silenciosamente
+            if (!error && data.session && JSON.stringify(session) !== JSON.stringify(data.session)) {
                 setSession(data.session);
             }
-        }, 1000 * 60 * 4); // 4 minutos
+        }, 1000 * 60 * 4); // Executa a cada 4 minutos
     };
 
-    // Eventos de atividade do usuário
     const eventosAtivos = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
     eventosAtivos.forEach(evt => window.addEventListener(evt, resetarTimerInatividade));
-
-    // Inicia os timers
     resetarTimerInatividade();
     startKeepAlive();
 
-    // --- 6. INICIALIZAÇÃO DO SISTEMA ---
+    // --- 3. INICIALIZAÇÃO BLINDADA (CORREÇÃO TELA BRANCA) ---
     const initializeAuth = async () => {
+      // Se o banco não responder em 7 segundos, libera o app para evitar travamento
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout de conexão")), 7000)
+      );
+
       try {
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        const sessionPromise = supabase.auth.getSession();
+        
+        // Corrida: Quem chegar primeiro ganha (Sessão ou Erro de Tempo)
+        const { data: { session: currentSession }, error } = await Promise.race([
+            sessionPromise,
+            timeoutPromise
+        ]).catch(err => {
+            console.warn("Demora na conexão detectada:", err);
+            return { data: { session: null }, error: null }; // Assume deslogado se der timeout
+        });
         
         if (mounted) {
           if (error) throw error;
@@ -120,10 +111,10 @@ export const AuthProvider = ({ children }) => {
           }
         }
       } catch (error) {
-        console.error("Erro ao iniciar:", error);
-        // Se o token for inválido, limpa tudo para evitar loop de carregamento
+        console.error("Erro inicialização:", error);
+        // Se for erro de token inválido, limpa tudo para o usuário logar de novo
         if (error.message && (error.message.includes('refresh_token_not_found') || error.status === 400)) {
-           await realizarLimpezaTotal();
+           realizarLimpezaTotal();
         }
       } finally {
         if (mounted) setLoading(false);
@@ -132,57 +123,39 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
-    // --- 7. ESCUTAR MUDANÇAS DE LOGIN/LOGOUT ---
+    // --- 4. LISTENER DE MUDANÇAS ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
-      
       if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
          setSession(null);
          setProfile(null);
          setLoading(false);
          return; 
       }
-
-      // Atualiza apenas se o token mudou (evita re-renders desnecessários)
       if (newSession?.access_token !== session?.access_token) {
           setSession(newSession);
       }
-      
-      // Se tem usuário mas não tem perfil carregado, busca o perfil
       if (newSession?.user && !profile) {
         await fetchProfile(newSession.user);
       }
       setLoading(false);
     });
 
-    // --- 8. AUTO-RECUPERAÇÃO AO FOCAR NA JANELA ---
+    // --- 5. RECUPERAÇÃO DE FOCO (Para quem usa celular e volta pro app) ---
     const handleFocus = async () => {
       const now = Date.now();
-      // Só checa se passou mais de 30 segundos desde a última vez (Performance)
-      if (now - lastCheckTime.current < 30000) return; 
+      if (now - lastCheckTime.current < 30000) return; // Não executa se tiver executado há menos de 30s
       lastCheckTime.current = now;
 
       const { data: { session: focusSession }, error } = await supabase.auth.getSession();
-      
-      if (error || !focusSession) {
-         // Se voltou pra aba e não tem sessão real, aí sim limpa
-         if (session) { 
-             console.warn("Sessão morreu em segundo plano.");
-             // Opcional: await realizarLimpezaTotal(); 
-             // Deixamos o usuário tentar uma ação, se falhar, o erro global pega.
-         }
-      } else {
-         // Se a sessão existe, garante sincronia
-         if (session?.access_token !== focusSession.access_token) {
-             console.log("Sessão recuperada ao focar.");
-             setSession(focusSession);
-         }
+      if (!error && focusSession && session?.access_token !== focusSession.access_token) {
+          console.log("Sessão recuperada ao focar.");
+          setSession(focusSession);
       }
     };
     
     window.addEventListener('focus', handleFocus);
 
-    // Limpeza ao desmontar
     return () => {
       mounted = false;
       subscription.unsubscribe();
@@ -211,7 +184,9 @@ export const AuthProvider = ({ children }) => {
         <div className="flex h-screen items-center justify-center bg-gray-50">
            <div className="flex flex-col items-center gap-4">
              <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-fuchsia-600"></div>
-             <p className="text-gray-500 font-semibold animate-pulse">Conectando ao sistema...</p>
+             <p className="text-gray-500 font-semibold animate-pulse">
+               Conectando ao sistema...
+             </p>
            </div>
         </div>
       )}

@@ -13,13 +13,13 @@ import ProfissionalEditPage from './pages/ProfissionalEditPage';
 import ServicosPage from './pages/ServicosPage';
 import ServicoEditPage from './pages/ServicoEditPage';
 import DashboardPage from './pages/DashboardPage';
-import ClientManagePage from './pages/ClientManagePage'; // Página de consulta do cliente
+import ClientManagePage from './pages/ClientManagePage'; 
 import HistoricoPage from './pages/HistoricoPage';
-import ClientesPage from './pages/ClientesPage'; // Página de gestão de clientes (Admin)
+import ClientesPage from './pages/ClientesPage'; 
 import HomePage from './pages/HomePage';
 
-// --- CONTROLE DE VERSÃO ---
-const VERSAO_ATUAL = '1.0.2'; // Subi para 1.0.2 para garantir que pegue as rotas novas
+// --- CONTROLE DE VERSÃO (Incrementado para limpar cache antigo) ---
+const VERSAO_ATUAL = '1.0.5'; 
 
 function App() {
 
@@ -27,18 +27,23 @@ function App() {
   useEffect(() => {
     const versaoSalva = localStorage.getItem('app_versao');
     if (versaoSalva !== VERSAO_ATUAL) {
-      console.log('Nova versão detectada (' + VERSAO_ATUAL + '). Limpando cache...');
+      console.log('Nova versão detectada (' + VERSAO_ATUAL + '). Forçando atualização...');
+      
+      // Limpeza profunda
       localStorage.clear();
       sessionStorage.clear();
+      
+      // Salva nova versão
       localStorage.setItem('app_versao', VERSAO_ATUAL);
-      // O reload é opcional, mas ajuda a garantir a limpeza
-      // window.location.reload(); 
+      
+      // Força reload HARD do navegador para corrigir erro 404 de scripts
+      window.location.reload(true); 
     }
   }, []);
 
   return (
     <Routes>
-      {/* --- Rotas Públicas (Cliente) --- */}
+      {/* --- Rotas Públicas --- */}
       <Route path="/" element={<Layout />}>
         <Route index element={<HomePage />} /> 
         <Route path="agendar" element={<AgendarPage />} />
@@ -46,7 +51,7 @@ function App() {
         <Route path="consultar" element={<ClientManagePage />} />
       </Route>
 
-      {/* --- Rotas Protegidas (Admin Geral - Agenda) --- */}
+      {/* --- Rotas Protegidas (Admin Geral) --- */}
       <Route element={<ProtectedRoute />}> 
         <Route path="/admin" element={<Layout />}>
           <Route index element={<AdminAgendaPage />} />
@@ -55,20 +60,16 @@ function App() {
 
       {/* --- Rotas EXCLUSIVAS DE ADMIN (Gestão) --- */}
       <Route element={<AdminRoute />}> 
-        
-        {/* Gestão de Profissionais */}
         <Route path="/admin/profissionais" element={<Layout />}>
           <Route index element={<ProfissionaisPage />} /> 
-          <Route path=":id" element={<ProfissionalEditPage />} /> {/* Faltava essa rota de edição */}
+          <Route path=":id" element={<ProfissionalEditPage />} /> 
         </Route>
 
-        {/* Gestão de Serviços */}
         <Route path="/admin/servicos" element={<Layout />}>
           <Route index element={<ServicosPage />} />
           <Route path=":id" element={<ServicoEditPage />} />
         </Route>
 
-        {/* Dashboards e Relatórios */}
         <Route path="/admin/dashboard" element={<Layout />}>
           <Route index element={<DashboardPage />} />
         </Route>
@@ -77,11 +78,9 @@ function App() {
           <Route index element={<HistoricoPage />} />
         </Route>
 
-        {/* Gestão de Clientes */}
         <Route path="/admin/clientes" element={<Layout />}>
           <Route index element={<ClientesPage />} />
         </Route>
-
       </Route>
     </Routes>
   );
