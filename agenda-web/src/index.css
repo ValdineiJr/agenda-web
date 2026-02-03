@@ -8,95 +8,128 @@ html, body, #root {
 @tailwind utilities;
 
 /* =========================================
-   1. CALENDÁRIO DO CLIENTE (Agendar.jsx) - UPGRADE VISUAL
+   1. CALENDÁRIO DO CLIENTE (AGENDAR.JSX)
+   >> DESIGN PREMIUM COMPACTO (ATUALIZADO) <<
    ========================================= */
 
-/* Container Principal */
 .react-datepicker-wrapper {
   width: 100%;
 }
+
 .react-datepicker {
-  @apply w-full border-none shadow-xl rounded-2xl font-sans overflow-hidden;
-  font-family: inherit;
+  @apply border-none shadow-xl rounded-2xl bg-white font-sans;
+  /* Flexbox para garantir estrutura sólida */
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  /* Largura máxima ajustada para ficar compacto e bonito no desktop */
+  max-width: 380px; 
+  margin: 0 auto;
+  padding-bottom: 12px;
+  overflow: hidden;
 }
 
-/* Header (Mês e Ano) - Visual Limpo */
+/* --- Cabeçalho (Mês e Ano) --- */
 .react-datepicker__header {
-  @apply bg-white border-b border-gray-100 pt-4 pb-2 rounded-t-2xl;
+  @apply bg-white border-none pt-5 pb-0 rounded-t-2xl;
+  /* Removemos paddings excessivos para aproximar o conteúdo */
 }
 
 .react-datepicker__current-month {
-  @apply text-fuchsia-800 font-bold text-lg capitalize mb-2;
+  @apply text-fuchsia-800 font-extrabold text-lg capitalize mb-4;
+}
+
+/* --- Dias da Semana (Dom, Seg...) --- */
+.react-datepicker__day-names {
+  @apply flex justify-between px-3 mb-1;
+  /* Margem inferior reduzida para colar nos dias */
 }
 
 .react-datepicker__day-name {
-  @apply text-gray-400 font-semibold text-xs uppercase tracking-wider w-10;
+  @apply text-gray-400 font-bold text-[10px] uppercase tracking-wider w-10 flex items-center justify-center m-0;
 }
 
-/* Setas de Navegação */
+/* --- Navegação (Setas) --- */
+.react-datepicker__navigation {
+  @apply top-5;
+}
 .react-datepicker__navigation-icon::before {
-  @apply border-fuchsia-600; /* Cor rosa para destaque */
-  width: 8px;
-  height: 8px;
-  border-width: 2px 2px 0 0;
+  @apply border-gray-400 w-2 h-2 border-t-2 border-r-2;
+  top: 1px;
 }
 .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
-  @apply border-fuchsia-800;
+  @apply border-fuchsia-600;
 }
 
-/* Container dos dias */
-.react-datepicker__month-container {
-  @apply w-full;
-}
+/* --- Grade de Dias --- */
 .react-datepicker__month {
-  @apply m-0 p-4;
+  @apply m-0 px-3 flex flex-col gap-1;
 }
+
 .react-datepicker__week {
-  @apply flex justify-around;
+  @apply flex justify-between;
 }
 
-/* Dias (Bolinhas) */
+/* --- Célula do Dia --- */
 .react-datepicker__day {
-  @apply w-10 h-10 flex items-center justify-center rounded-full text-sm font-medium transition-all relative;
-  margin: 0.2rem;
+  @apply w-10 h-10 m-0 flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all relative cursor-pointer text-gray-700;
+  /* Margem zero para controle total via flex gap */
 }
 
-/* Dia Comum (Interativo) */
-.react-datepicker__day:not(.react-datepicker__day--disabled):not(.react-datepicker__day--selected) {
-  @apply text-gray-700 hover:bg-fuchsia-50 hover:text-fuchsia-700;
+/* Hover no dia (apenas se não estiver desabilitado ou selecionado) */
+.react-datepicker__day:hover:not(.react-datepicker__day--disabled):not(.react-datepicker__day--selected) {
+  @apply bg-fuchsia-50 text-fuchsia-700 font-bold;
 }
 
 /* Dia Selecionado */
 .react-datepicker__day--selected {
-  @apply bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-200;
+  @apply bg-fuchsia-600 text-white shadow-md shadow-fuchsia-200 !important;
   font-weight: bold;
 }
 .react-datepicker__day--selected:hover {
   @apply bg-fuchsia-700;
 }
 
-/* Dia Desabilitado */
+/* Dia "Hoje" */
+.react-datepicker__day--today {
+  @apply font-bold text-fuchsia-600 border border-fuchsia-100;
+}
+
+/* Dia Desabilitado (Passado) */
 .react-datepicker__day--disabled {
-  @apply text-gray-300 cursor-not-allowed opacity-50;
+  @apply text-gray-300 opacity-40 cursor-not-allowed;
 }
 .react-datepicker__day--disabled:hover {
   @apply bg-transparent;
 }
 
-/* Dia "Hoje" */
-.react-datepicker__day--today {
-  @apply border border-fuchsia-200 text-fuchsia-700 font-bold;
+/* --- NOVOS INDICADORES (BOLINHAS) --- */
+/* Container dentro do dia para centralizar número e bolinha */
+.day-content-wrapper {
+  @apply relative flex flex-col items-center justify-center w-full h-full;
 }
 
-/* --- BOLINHA INDICADORA DE DISPONIBILIDADE (NOVO) --- */
-.day-indicator-dot {
-  @apply absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-green-500 rounded-full;
+.dot-indicator {
+  @apply absolute bottom-1.5 w-1.5 h-1.5 rounded-full transition-all;
+}
+
+.dot-green {
+  @apply bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)];
+}
+
+.dot-red {
+  @apply bg-red-400 opacity-50;
+}
+
+/* Ajuste de contraste: bolinha fica branca no dia selecionado */
+.react-datepicker__day--selected .dot-indicator {
+  @apply bg-white shadow-none opacity-100;
 }
 
 
 /* =========================================
    2. AGENDA ADMINISTRATIVA (AdminAgenda.jsx)
-   Mantendo as correções de Tooltip e Mês
+   Correções mantidas: Tooltip e Visualização Mês
    ========================================= */
 
 /* Container Geral */

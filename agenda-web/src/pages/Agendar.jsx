@@ -9,7 +9,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('pt-BR', ptBR); 
 
-// --- COMPONENTE DE SUCESSO (Com Botão Piscante) ---
+// --- COMPONENTE DE SUCESSO ---
 function TelaSucesso({ itensAgendados, cliente, onNovoAgendamento }) {
   const numeroWhatsapp = '5519988136946'; 
   
@@ -37,7 +37,6 @@ function TelaSucesso({ itensAgendados, cliente, onNovoAgendamento }) {
       </h1>
       <p className="text-gray-500 mb-8">Agora, confirme enviando o comprovante.</p>
       
-      {/* Botão Piscante */}
       <a
         href={linkWhatsapp}
         target="_blank"
@@ -160,19 +159,17 @@ function AgendarPage() {
     }
   }, [categoriaSelecionada, todosServicos]);
 
-  // --- SELEÇÃO DE PROFISSIONAL (AUTO-AVANÇO) ---
+  // --- SELEÇÃO DE PROFISSIONAL ---
   const selecionarServico = (serv) => {
     setServicoSelecionado(serv);
     setEtapa(2); // Avança direto
     
-    // Busca profissionais imediatamente
     setProfissionais([]);
     setProfissionalSelecionado(null);
     setHorarioSelecionado(null);
     
     const loadProfs = async () => {
       setIsLoadingProfissionais(true);
-      // Removido 'foto_url' do select para evitar erro se a coluna não existir
       const { data, error } = await supabase
         .from('profissionais_servicos')
         .select('profissionais ( id, nome )') 
@@ -204,6 +201,7 @@ function AgendarPage() {
       const diaDaSemana = dataAlvo.getDay();
       const dataISO = dataAlvo.toISOString().split('T')[0];
 
+      // Validação rápida de dia
       let diaValido = true;
       if (servicoSelecionado.datas_especificas?.length > 0) {
         if (!servicoSelecionado.datas_especificas.includes(dataISO)) diaValido = false;
@@ -265,29 +263,43 @@ function AgendarPage() {
     }
   }
 
-  // --- RENDERIZADOR DO CALENDÁRIO ---
+  // --- RENDERIZADOR DO CALENDÁRIO COM LÓGICA DE BOLINHAS ---
   const renderDiaCalendario = (day, date) => {
-    let temVagaVisual = false;
+    // 1. Verifica se é passado
+    const hojeZeroHora = new Date();
+    hojeZeroHora.setHours(0, 0, 0, 0);
+    if (date < hojeZeroHora) {
+        // Dia passado = sem bolinha (o CSS já deixa o texto cinza)
+        return <div className="day-content-wrapper"><span>{day}</span></div>;
+    }
+
+    // 2. Verifica se o profissional trabalha neste dia (Dia da Semana ou Data Específica)
+    let isDiaDeTrabalho = false;
+    
     if (servicoSelecionado) {
         const dataISO = date.toISOString().split('T')[0];
         const diaSemana = date.getDay();
         
         if (servicoSelecionado.datas_especificas?.length > 0) {
-            temVagaVisual = servicoSelecionado.datas_especificas.includes(dataISO);
+            // Se o serviço usa datas específicas, só é verde se estiver na lista
+            isDiaDeTrabalho = servicoSelecionado.datas_especificas.includes(dataISO);
         } else if (servicoSelecionado.dias_disponiveis?.length > 0) {
-            temVagaVisual = servicoSelecionado.dias_disponiveis.includes(diaSemana);
+            // Se usa dias da semana, verifica o array
+            isDiaDeTrabalho = servicoSelecionado.dias_disponiveis.includes(diaSemana);
         } else {
-            temVagaVisual = true; 
+            // Se não tem restrição, assume que trabalha todo dia (fallback)
+            isDiaDeTrabalho = true; 
         }
     }
-    
-    if (date < new Date(new Date().setHours(0,0,0,0))) temVagaVisual = false;
 
     return (
-        <div className="relative flex flex-col items-center justify-center h-full w-full">
-            <span className="z-10">{day}</span>
-            {temVagaVisual && (
-                <div className="day-indicator-dot absolute bottom-1 w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+        <div className="day-content-wrapper">
+            <span>{day}</span>
+            {/* Bolinha Verde (Disponível) ou Vermelha (Indisponível) */}
+            {isDiaDeTrabalho ? (
+                <div className="dot-indicator dot-green"></div>
+            ) : (
+                <div className="dot-indicator dot-red"></div>
             )}
         </div>
     );
@@ -306,7 +318,7 @@ function AgendarPage() {
     setServicoSelecionado(null);
     setProfissionalSelecionado(null);
     setHorarioSelecionado(null);
-    setEtapa(5); // Vai para revisão
+    setEtapa(5); 
   };
 
   const removerDoCarrinho = (index) => {
@@ -316,13 +328,12 @@ function AgendarPage() {
     if (novoCarrinho.length === 0) setEtapa(1);
   };
 
-  // --- FUNÇÃO QUE FALTAVA (RECRIADA) ---
   const handleAdicionarMais = () => {
     if (carrinho.length >= 3) {
       alert("Para garantir a qualidade, permitimos agendar no máximo 3 serviços por vez.");
       return;
     }
-    setEtapa(1); // Volta para escolher outro serviço
+    setEtapa(1); 
   };
 
   const finalizarAgendamento = async () => {
@@ -458,7 +469,6 @@ function AgendarPage() {
                     {profissionais.map(prof => (
                       <button key={prof.id} onClick={() => selecionarProfissional(prof)} className="p-4 border border-gray-100 rounded-2xl hover:border-fuchsia-400 hover:shadow-md transition-all text-center group bg-white">
                         <div className="w-20 h-20 bg-gray-100 rounded-full mx-auto mb-3 overflow-hidden border-2 border-transparent group-hover:border-fuchsia-300 transition-all">
-                           {/* Como o banco não tem foto ainda, usa inicial */}
                            <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400 group-hover:text-fuchsia-500">
                              {prof.nome.charAt(0)}
                            </div>
@@ -483,18 +493,18 @@ function AgendarPage() {
                     onChange={(date) => {
                       setDataSelecionada(date);
                       buscarHorariosDisponiveis(date);
-                      setEtapa(4); // Garante que mostre os horários
+                      setEtapa(4); 
                     }}
                     inline
                     locale="pt-BR"
                     minDate={hoje}
                     maxDate={limiteFuturo}
-                    renderDayContents={renderDiaCalendario} // AQUI ESTÁ A MÁGICA DAS BOLINHAS
+                    renderDayContents={renderDiaCalendario} // USA A NOVA FUNÇÃO DE BOLINHAS
                     calendarClassName="border-0 shadow-none"
                   />
                 </div>
 
-                {/* AREA DE HORÁRIOS (Aparece embaixo do calendário) */}
+                {/* AREA DE HORÁRIOS */}
                 <div className={`transition-all duration-500 ${etapa === 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 hidden'}`}>
                     <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">
                         Horários para <span className="text-fuchsia-600 capitalize">{dataSelecionada.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric' })}</span>
