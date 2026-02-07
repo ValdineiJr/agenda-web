@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '/src/supabaseClient.js';
 import { useAuth } from '/src/AuthContext.jsx';
 
@@ -27,57 +27,100 @@ const messages = {
   allDay: 'Dia Inteiro', previous: 'Anterior', next: 'Próximo',
   today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia',
   agenda: 'Lista', date: 'Data', time: 'Hora', event: 'Evento',
-  noEventsInRange: 'Sem agendamentos.', showMore: (total) => `+${total} mais`,
+  noEventsInRange: 'Sem agendamentos neste período.',
+  showMore: (total) => `+${total} mais`,
 };
 
 const MOTIVOS_ADMIN = [
-  "Cliente solicitou (WhatsApp)", "Profissional indisponível", "Cliente não compareceu (No-show)", "Outro motivo"
+  "Cliente solicitou (WhatsApp)", 
+  "Profissional indisponível", 
+  "Cliente não compareceu (No-show)", 
+  "Erro de Agendamento",
+  "Outro motivo"
 ];
 
 // =========================================================
-//               FUNÇÕES AUXILIARES
+//               FUNÇÕES AUXILIARES DE FORMATAÇÃO
 // =========================================================
 function formatarDataCabecalho(dataString) {
-  // Converte dd/mm/yyyy para Data legível
+  // Converte string 'dd/mm/yyyy' em Data legível
+  if (!dataString) return '';
   const [dia, mes, ano] = dataString.split('/');
-  return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${ano}-${mes}-${dia}T12:00:00`));
+  const data = new Date(`${ano}-${mes}-${dia}T12:00:00`);
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(data);
 }
+
 function formatarHora(dataISO) {
+  if (!dataISO) return '';
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(dataISO));
 }
 
 // =========================================================
-//    COMPONENTE DE EVENTO (CALENDÁRIO)
+//    COMPONENTE DE EVENTO (VISUAL DO CALENDÁRIO)
 // =========================================================
-const EventoPersonalizado = ({ event }) => {
+const EventoCalendario = ({ event }) => {
   const isEmAtendimento = event.resource.status === 'em_atendimento';
-  const containerClass = isEmAtendimento 
-    ? 'bg-amber-50 border-l-4 border-amber-500 text-amber-900' 
-    : 'bg-white border-l-4 border-fuchsia-600 text-gray-700';
+  const isFinalizado = event.resource.status === 'finalizado';
+  const isCancelado = event.resource.status === 'cancelado';
+
+  // Definição de Cores Baseada no Status
+  let borderClass = 'border-fuchsia-600';
+  let bgClass = 'bg-white text-gray-700';
+  let indicator = null;
+
+  if (isEmAtendimento) {
+    borderClass = 'border-amber-500';
+    bgClass = 'bg-amber-50 text-amber-900';
+    indicator = <span className="absolute top-1 right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span></span>;
+  } else if (isFinalizado) {
+    borderClass = 'border-gray-400';
+    bgClass = 'bg-gray-100 text-gray-400 opacity-70';
+  } else if (isCancelado) {
+    borderClass = 'border-red-500';
+    bgClass = 'bg-red-50 text-red-800 decoration-slate-400';
+  }
 
   return (
     <div className="relative group h-full w-full font-sans">
-      <div className={`h-full w-full rounded-r-md p-1.5 shadow-sm flex flex-col justify-between overflow-hidden leading-tight ${containerClass}`}>
+      <div className={`h-full w-full border-l-[4px] ${borderClass} rounded-r-md p-1.5 shadow-sm hover:shadow-md transition-all ${bgClass} flex flex-col justify-start overflow-hidden leading-tight`}>
+        {indicator}
         <div className="flex justify-between items-center mb-0.5">
-           <span className={`text-[10px] font-bold ${isEmAtendimento ? 'text-amber-700' : 'text-fuchsia-600'}`}>{format(event.start, 'HH:mm')}</span>
-           {isEmAtendimento && (
-             <span className="flex h-2 w-2 relative">
-               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-               <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-             </span>
-           )}
+           <span className="text-[10px] font-bold opacity-80 font-mono">
+             {format(event.start, 'HH:mm')}
+           </span>
         </div>
-        <div className="flex-1 min-h-0 flex flex-col justify-center">
-            <div className="font-extrabold text-xs truncate">{event.resource.nome_cliente.split(' ')[0]}</div>
-            <div className="text-[10px] opacity-80 truncate">{event.resource.servicos?.nome}</div>
+        
+        <div className="font-extrabold text-[11px] truncate uppercase tracking-tight">
+          {event.resource.nome_cliente}
+        </div>
+        <div className="text-[10px] truncate opacity-90 font-medium">
+          {event.resource.servicos?.nome}
         </div>
       </div>
-      {/* Tooltip Hover */}
-      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-[9999] w-64 bg-white p-4 rounded-xl shadow-2xl border border-gray-100 pointer-events-none ring-1 ring-black/5">
-         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-100"></div>
-         <p className="font-bold text-gray-800">{event.resource.nome_cliente}</p>
-         <p className="text-xs text-gray-500">{event.resource.servicos?.nome}</p>
-         <p className="text-xs text-gray-500 mt-1">Prof: {event.resource.profissionais?.nome}</p>
+      
+      {/* Tooltip Hover (Restauração da funcionalidade de passar o mouse) */}
+      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-[9999] w-72 bg-white p-0 rounded-xl shadow-2xl border border-gray-200 pointer-events-none ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150 origin-top">
+         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-200"></div>
+         
+         <div className="bg-gradient-to-r from-gray-50 to-white p-3 border-b border-gray-100 rounded-t-xl">
+            <p className="font-black text-gray-800 text-sm uppercase">{event.resource.nome_cliente}</p>
+            <p className="text-xs text-gray-500 flex items-center gap-1">📱 {event.resource.telefone_cliente || 'Sem telefone'}</p>
+         </div>
+         <div className="p-3 space-y-2 text-xs text-gray-600">
+            <div className="flex justify-between">
+              <span className="font-bold text-gray-400">SERVIÇO:</span>
+              <span className="font-bold text-fuchsia-700">{event.resource.servicos?.nome}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-bold text-gray-400">PROFISSIONAL:</span>
+              <span>{event.resource.profissionais?.nome}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-bold text-gray-400">HORÁRIO:</span>
+              <span className="bg-slate-100 px-1 rounded font-mono">{format(event.start, 'HH:mm')} - {format(event.end, 'HH:mm')}</span>
+            </div>
+            {isEmAtendimento && <div className="text-center bg-amber-100 text-amber-800 font-bold py-1 rounded mt-2">EM ATENDIMENTO</div>}
+         </div>
       </div>
     </div>
   );
@@ -89,277 +132,590 @@ const EventoPersonalizado = ({ event }) => {
 function AdminAgenda() {
   const { profile, loading: authLoading } = useAuth(); 
   
-  // States de Dados
+  // --- STATES DE DADOS ---
   const [agendamentosRawState, setAgendamentosRawState] = useState([]); 
   const [agendamentosAgrupados, setAgendamentosAgrupados] = useState({});
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [proximosAgendamentos, setProximosAgendamentos] = useState([]);
 
-  // States de Controle
+  // --- STATES DE UI E FILTROS ---
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState('cards'); // Iniciando em Cards como solicitado nas imagens
+  const [viewMode, setViewMode] = useState('calendar'); // 'calendar', 'cards', 'list_today'
   const [filtroProfissionalId, setFiltroProfissionalId] = useState(''); 
-  const [selectedBulkIds, setSelectedBulkIds] = useState([]);
-
-  // Modal
-  const [modalIsOpen, setModalIsOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('new'); 
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [calendarView, setCalendarView] = useState('week'); 
+  const [selectedBulkIds, setSelectedBulkIds] = useState([]); // Array de IDs para ação em massa
+  const [calendarView, setCalendarView] = useState('week');
   const [calendarDate, setCalendarDate] = useState(new Date());
-  
+
+  // --- DADOS AUXILIARES (Preenchidos no Load) ---
   const [allServicos, setAllServicos] = useState([]);
   const [allProfissionais, setAllProfissionais] = useState([]);
   
-  // Form Modal
+  // --- MODAL PRINCIPAL ---
+  const [modalIsOpen, setModalIsOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('new'); // 'new' ou 'edit'
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  
+  // --- CAMPOS DO FORMULÁRIO MODAL ---
   const [modalServicoId, setModalServicoId] = useState('');
   const [modalProfissionalId, setModalProfissionalId] = useState('');
   const [modalNome, setModalNome] = useState('');
-  const [modalEmail, setModalEmail] = useState('');
+  const [modalEmail, setModalEmail] = useState(''); // Mantido, embora oculto no UI básico
   const [modalTelefone, setModalTelefone] = useState('');
   const [isSavingModal, setIsSavingModal] = useState(false);
   const [modalError, setModalError] = useState(null);
   
-  // Lógicas Extras
+  // --- LÓGICA DE REMARCAÇÃO (COMPLEXA) ---
   const [showRemarcar, setShowRemarcar] = useState(false);
   const [novaData, setNovaData] = useState(new Date());
   const [novosHorarios, setNovosHorarios] = useState([]);
   const [loadingNovosHorarios, setLoadingNovosHorarios] = useState(false);
   const [novoHorarioSelecionado, setNovoHorarioSelecionado] = useState(null);
+
+  // --- LÓGICA DE CANCELAMENTO ---
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [adminCancelReason, setAdminCancelReason] = useState(MOTIVOS_ADMIN[0]);
 
-  useEffect(() => { if (!authLoading && profile) fetchModalData(); }, [authLoading, profile]);
-  useEffect(() => { if (!authLoading && profile) fetchAgendamentos(); }, [authLoading, profile, filtroProfissionalId]); 
+  // --- EFFECTS ---
+  useEffect(() => { 
+    if (!authLoading && profile) {
+      fetchModalData();
+    }
+  }, [authLoading, profile]);
 
-  // --- BUSCAS DE DADOS ---
+  useEffect(() => { 
+    if (!authLoading && profile) {
+      fetchAgendamentos(); 
+    }
+  }, [authLoading, profile, filtroProfissionalId]); // Recarrega se mudar o filtro
+
+  // =========================================================
+  //               FETCH DE DADOS (SUPABASE)
+  // =========================================================
   async function fetchModalData() {
-    const { data: servicosData } = await supabase.from('servicos').select('id, nome, duracao_minutos');
-    if (servicosData) setAllServicos(servicosData);
-    const { data: profData } = await supabase.from('profissionais').select('id, nome');
-    if (profData) setAllProfissionais(profData);
+    try {
+        const { data: servicosData } = await supabase.from('servicos').select('id, nome, duracao_minutos').eq('ativo', true);
+        if (servicosData) setAllServicos(servicosData);
+        
+        const { data: profData } = await supabase.from('profissionais').select('id, nome').eq('ativo', true);
+        if (profData) setAllProfissionais(profData);
+    } catch (e) {
+        console.error("Erro ao buscar dados auxiliares", e);
+    }
   }
 
   async function fetchAgendamentos() {
     setLoading(true);
     if (!profile) return;
 
+    // Busca desde o dia 1 do mês atual até muito pra frente para popular calendário
     const hoje = new Date();
     const inicioDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     inicioDoMes.setHours(0, 0, 0, 0);
     
     let query = supabase
       .from('agendamentos')
-      .select(`id, nome_cliente, email_cliente, telefone_cliente, data_hora_inicio, data_hora_fim, servico_id, profissional_id, status, cancelamento_motivo, servicos ( nome, duracao_minutos ), profissionais ( nome )`)
+      .select(`
+        id, nome_cliente, email_cliente, telefone_cliente, 
+        data_hora_inicio, data_hora_fim, servico_id, profissional_id, 
+        status, cancelamento_motivo, 
+        servicos ( nome, duracao_minutos ), 
+        profissionais ( nome )
+      `)
       .gte('data_hora_inicio', inicioDoMes.toISOString()) 
       .order('data_hora_inicio', { ascending: true });
     
-    if (profile.role !== 'admin') query = query.eq('profissional_id', profile.id);
+    // Se não for admin, vê apenas os seus
+    if (profile.role !== 'admin') {
+        query = query.eq('profissional_id', profile.id);
+    }
 
-    const { data: agendamentosRaw, error } = await query;
+    const { data: raw, error } = await query;
     
-    if (agendamentosRaw) {
-      setAgendamentosRawState(agendamentosRaw);
-
-      let filtrados = agendamentosRaw;
-      if (filtroProfissionalId) filtrados = agendamentosRaw.filter(ag => ag.profissional_id == filtroProfissionalId);
-
-      // Ativos para o calendário/cards
+    if (raw) {
+      setAgendamentosRawState(raw);
+      
+      // Filtragem local para o select de "Profissional" no topo da tela
+      let filtrados = filtroProfissionalId 
+        ? raw.filter(ag => ag.profissional_id == filtroProfissionalId) 
+        : raw;
+      
       const ativos = filtrados.filter(ag => ag.status !== 'cancelado');
       
-      // Lógica "Avisos Rápidos" (Hoje e Amanhã)
+      // 1. Lógica para "Avisos Rápidos" (Hoje e Amanhã) - PISCANTE
       const agora = new Date(); agora.setHours(0,0,0,0);
-      const limite = new Date(agora); limite.setDate(limite.getDate() + 2); // +2 dias
+      const limite = new Date(agora); limite.setDate(limite.getDate() + 2);
       
-      setProximosAgendamentos(ativos.filter(ag => {
+      const proximos = ativos.filter(ag => {
          const d = new Date(ag.data_hora_inicio); 
-         return d >= agora && d < limite && ag.status === 'confirmado';
-      }));
+         return d >= agora && d < limite && (ag.status === 'confirmado' || ag.status === 'em_atendimento');
+      });
+      setProximosAgendamentos(proximos);
       
-      // Agrupar por dia (dd/mm/yyyy) para a view Cards
+      // 2. Agrupamento para View "Cards"
       const agrupar = (lista) => lista.reduce((acc, ag) => {
           const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
-          if (!acc[d]) acc[d] = []; acc[d].push(ag); return acc;
+          if (!acc[d]) acc[d] = []; 
+          acc[d].push(ag); 
+          return acc;
       }, {});
-
       setAgendamentosAgrupados(agrupar(ativos));
 
-      // Eventos para o Calendário BigCalendar
-      setEventosCalendario(ativos.map(ag => ({
+      // 3. Mapeamento para React-Big-Calendar
+      const eventos = ativos.map(ag => ({
+        id: ag.id,
         title: ag.nome_cliente, 
         start: new Date(ag.data_hora_inicio), 
         end: new Date(ag.data_hora_fim), 
         resource: ag, 
-      })));
+      }));
+      setEventosCalendario(eventos);
     }
     setLoading(false);
   }
 
-  // --- AÇÕES ---
+  // =========================================================
+  //            AÇÕES: WHATSAPP, STATUS, BULK
+  // =========================================================
   const handleEnviarWhatsApp = (agendamento, tipo) => {
     const telefone = agendamento.telefone_cliente?.replace(/[^0-9]/g, '');
-    if (!telefone) return alert("Sem telefone cadastrado.");
+    if (!telefone) return alert("Cliente sem telefone cadastrado.");
     
     const nome = agendamento.nome_cliente.split(' ')[0];
-    const data = format(new Date(agendamento.data_hora_inicio), "dd/MM");
-    const hora = formatarHora(agendamento.data_hora_inicio);
+    const dataF = format(new Date(agendamento.data_hora_inicio), "dd/MM");
+    const horaF = formatarHora(agendamento.data_hora_inicio);
     const servico = agendamento.servicos?.nome || 'Serviço';
     
     let msg = "";
-    if (tipo === 'confirmacao') msg = `Olá ${nome}, tudo bem? Passando para confirmar seu horário de *${servico}* para o dia *${data} às ${hora}*. Podemos confirmar?`;
-    else if (tipo === 'lembrete') msg = `Olá ${nome}! Lembrete do seu horário de *${servico}* amanhã, dia *${data} às ${hora}*. Te aguardamos!`;
+    if (tipo === 'confirmacao') {
+        msg = `Olá ${nome}, tudo bem? Passando para confirmar seu horário de *${servico}* para o dia *${dataF} às ${horaF}*. Podemos confirmar?`;
+    } else if (tipo === 'lembrete') {
+        msg = `Olá ${nome}! Lembrete do seu horário de *${servico}* amanhã, dia *${dataF} às ${horaF}*. Te aguardamos!`;
+    } else if (tipo === 'cancelamento') {
+         msg = `Olá ${nome}. Infelizmente precisamos cancelar/remarcar seu horário de *${servico}* no dia ${dataF}. Motivo: ${adminCancelReason}. Entre em contato para reagendar.`;
+    } else {
+        msg = `Olá ${nome}, sobre seu agendamento no Studio...`;
+    }
     
     window.open(`https://wa.me/55${telefone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const handleUpdateStatus = async (agendamentoId, novoStatus) => {
     const { error } = await supabase.from('agendamentos').update({ status: novoStatus }).eq('id', agendamentoId);
-    if (error) alert('Erro ao atualizar.'); else fetchAgendamentos();
+    if (error) alert('Erro ao atualizar status.'); else fetchAgendamentos();
   };
 
+  // --- Lógica de Checkbox (Bulk Actions) ---
   const toggleBulkSelect = (id) => {
     setSelectedBulkIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
+  
+  const toggleSelectAllHoje = (listaDeHoje) => {
+    if (selectedBulkIds.length === listaDeHoje.length) {
+        setSelectedBulkIds([]); // Desmarcar tudo
+    } else {
+        setSelectedBulkIds(listaDeHoje.map(ag => ag.id)); // Marcar tudo
+    }
+  };
 
   const handleBulkFinish = async () => {
-    if (selectedBulkIds.length === 0) return alert("Selecione algo.");
-    if (!window.confirm(`Finalizar ${selectedBulkIds.length} agendamentos?`)) return;
+    if (selectedBulkIds.length === 0) return alert("Selecione pelo menos um agendamento.");
+    if (!window.confirm(`Deseja FINALIZAR ${selectedBulkIds.length} agendamentos de uma vez?`)) return;
+    
     setLoading(true);
-    await supabase.from('agendamentos').update({ status: 'finalizado' }).in('id', selectedBulkIds);
-    setSelectedBulkIds([]); fetchAgendamentos();
+    const { error } = await supabase.from('agendamentos').update({ status: 'finalizado' }).in('id', selectedBulkIds);
+    
+    if (error) alert("Erro ao finalizar em massa.");
+    else {
+        setSelectedBulkIds([]); 
+        fetchAgendamentos();
+    }
     setLoading(false);
   };
 
-  // --- MODAL HANDLERS ---
+  // =========================================================
+  //            MODAL: ABERTURA, SALVAMENTO, REMARCAÇÃO
+  // =========================================================
+  
+  // Abre modal para CRIAR
   const handleSelectSlot = (slotInfo) => {
-    setModalMode('new'); setSelectedEvent({ start: slotInfo.start, end: slotInfo.end });
-    setModalServicoId(''); setModalNome(''); setModalTelefone(''); setModalError(null); 
-    setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
+    setModalMode('new'); 
+    setSelectedEvent({ start: slotInfo.start, end: slotInfo.end });
+    // Reseta campos
+    setModalServicoId(''); setModalNome(''); setModalTelefone(''); setModalEmail(''); setModalError(null); 
     setModalProfissionalId(profile?.role !== 'admin' ? profile?.id : (filtroProfissionalId || ''));
+    
+    // Reseta estados extras
+    setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
     setModalIsOpen(true);
   };
 
+  // Abre modal para EDITAR
   const handleSelectEvent = (eventInfo) => {
-    const ag = eventInfo.resource || eventInfo; // Serve tanto pro Calendar quanto pro botão Editar do card
-    setModalMode('edit'); setSelectedEvent(ag);
-    setModalServicoId(ag.servico_id); setModalProfissionalId(ag.profissional_id); 
-    setModalNome(ag.nome_cliente); setModalTelefone(ag.telefone_cliente || '');
-    setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); 
-    setNovaData(new Date(ag.data_hora_inicio)); setShowCancelOptions(false);
+    const ag = eventInfo.resource || eventInfo; 
+    setModalMode('edit'); 
+    setSelectedEvent(ag);
+    
+    // Popula campos
+    setModalServicoId(ag.servico_id); 
+    setModalProfissionalId(ag.profissional_id); 
+    setModalNome(ag.nome_cliente); 
+    setModalTelefone(ag.telefone_cliente || '');
+    setModalEmail(ag.email_cliente || '');
+    
+    setModalError(null); 
+    setShowRemarcar(false); 
+    setNovoHorarioSelecionado(null); 
+    setNovaData(new Date(ag.data_hora_inicio)); 
+    setShowCancelOptions(false);
+    setAdminCancelReason(MOTIVOS_ADMIN[0]);
+    
     setModalIsOpen(true); 
   };
   
   const closeModal = () => { setModalIsOpen(false); setSelectedEvent(null); };
 
-  const handleModalSave = async () => {
-    setIsSavingModal(true); setModalError(null);
-    try {
-      if (!modalServicoId || !modalProfissionalId || !modalNome) throw new Error('Preencha os dados.');
-      const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
-      let ini;
-      if (showRemarcar && novoHorarioSelecionado) ini = new Date(novoHorarioSelecionado);
-      else if (modalMode === 'new') ini = selectedEvent?.start ? new Date(selectedEvent.start) : new Date();
-      else ini = new Date(selectedEvent.data_hora_inicio);
-      
-      const fim = new Date(ini.getTime() + servico.duracao_minutos * 60000);
-      const payload = { servico_id: servico.id, profissional_id: parseInt(modalProfissionalId), nome_cliente: modalNome, telefone_cliente: modalTelefone, data_hora_inicio: ini.toISOString(), data_hora_fim: fim.toISOString(), status: 'confirmado' };
-
-      if (modalMode === 'new') await supabase.from('agendamentos').insert(payload);
-      else await supabase.from('agendamentos').update(payload).eq('id', selectedEvent.id);
-
-      closeModal(); fetchAgendamentos();
-    } catch (e) { setModalError(e.message); } finally { setIsSavingModal(false); }
-  };
-
-  const handleModalCancel = async () => {
-    try {
-        await supabase.from('agendamentos').update({ status: 'cancelado', cancelamento_motivo: adminCancelReason }).eq('id', selectedEvent.id);
-        const link = `https://wa.me/55${selectedEvent.telefone_cliente?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Cancelamento: ' + adminCancelReason)}`;
-        window.open(link, '_blank');
-        closeModal(); fetchAgendamentos();
-    } catch (e) { alert('Erro ao cancelar'); }
-  };
-
+  // --- BUSCA DE HORÁRIOS DISPONÍVEIS (LÓGICA RESTAURADA) ---
   const buscarHorariosParaRemarcar = async (data) => {
-    setLoadingNovosHorarios(true); setNovosHorarios([]);
-    // (Lógica simplificada para caber, use a mesma lógica completa se precisar)
-    // Assume que a lógica de buscar horários já existe e funciona
+    setLoadingNovosHorarios(true); 
+    setNovosHorarios([]); 
+    setNovoHorarioSelecionado(null); 
+    setNovaData(data);
+
+    const profId = parseInt(modalProfissionalId); 
+    const servId = parseInt(modalServicoId);
+
+    if (!profId || !servId) {
+        setModalError("Selecione serviço e profissional para buscar horários.");
+        setLoadingNovosHorarios(false);
+        return;
+    }
+    
+    const servico = allServicos.find(s => s.id === servId);
+    
+    // 1. Busca Turno do Profissional
+    const { data: turno } = await supabase
+        .from('horarios_trabalho')
+        .select('hora_inicio, hora_fim')
+        .eq('dia_semana', data.getDay())
+        .eq('profissional_id', profId)
+        .single();
+    
+    if (!turno) {
+        setLoadingNovosHorarios(false); 
+        return; // Não trabalha neste dia
+    }
+    
+    // 2. Busca Agendamentos existentes no dia para conflito
+    const diaInicio = new Date(data); diaInicio.setHours(0,0,0,0);
+    const diaFim = new Date(data); diaFim.setHours(23,59,59,999);
+
+    const { data: agendamentosDoDia } = await supabase
+        .from('agendamentos')
+        .select('data_hora_inicio, data_hora_fim')
+        .eq('profissional_id', profId)
+        .neq('status', 'cancelado')
+        .neq('id', selectedEvent?.id || 0) // Exclui o próprio agendamento atual da checagem
+        .gte('data_hora_inicio', diaInicio.toISOString())
+        .lte('data_hora_fim', diaFim.toISOString());
+
+    // 3. Gera Slots
+    const slots = [];
+    const [hIni, mIni] = turno.hora_inicio.split(':');
+    const [hFim, mFim] = turno.hora_fim.split(':');
+    
+    let cursor = new Date(data); cursor.setHours(parseInt(hIni), parseInt(mIni), 0, 0);
+    const limite = new Date(data); limite.setHours(parseInt(hFim), parseInt(mFim), 0, 0);
+    
+    while (cursor < limite) {
+        const slotFim = new Date(cursor.getTime() + servico.duracao_minutos * 60000);
+        
+        if (slotFim > limite) break; // Passou do expediente
+
+        // Verifica Conflito
+        const temConflito = agendamentosDoDia?.some(ag => {
+            const agIni = new Date(ag.data_hora_inicio);
+            const agFim = new Date(ag.data_hora_fim);
+            // Lógica de intersecção de intervalos
+            return (cursor < agFim && slotFim > agIni);
+        });
+
+        // Verifica se é passado
+        if (!temConflito && cursor > new Date()) {
+            slots.push(new Date(cursor));
+        }
+
+        cursor = new Date(cursor.getTime() + servico.duracao_minutos * 60000); // Avança
+    }
+    
+    setNovosHorarios(slots); 
     setLoadingNovosHorarios(false);
   };
 
-  // --- RENDERIZADORES ---
+  // --- SALVAR (INSERT / UPDATE) ---
+  const handleModalSave = async () => {
+    setIsSavingModal(true); setModalError(null);
+    try {
+      // Validação Básica
+      if (!modalServicoId || !modalProfissionalId || !modalNome) throw new Error('Nome, Serviço e Profissional são obrigatórios.');
+      
+      const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
+      
+      // Determina Inicio
+      let dataInicio;
+      if (showRemarcar && novoHorarioSelecionado) {
+          dataInicio = new Date(novoHorarioSelecionado); // Veio da remarcação
+      } else if (modalMode === 'new') {
+          dataInicio = selectedEvent?.start ? new Date(selectedEvent.start) : new Date(); // Veio do clique no calendário
+      } else {
+          dataInicio = new Date(selectedEvent.data_hora_inicio); // Mantém original
+      }
+      
+      const dataFim = new Date(dataInicio.getTime() + servico.duracao_minutos * 60000);
 
-  const renderListaHoje = () => {
-    // Código da Lista de Hoje (mantido da versão anterior se necessário, mas o foco aqui é o Cards)
-    return <div className="p-4 bg-white rounded-xl shadow">Lista Detalhada de Hoje (Use a aba Cards para visualização visual)</div>;
+      const payload = { 
+          servico_id: servico.id, 
+          profissional_id: parseInt(modalProfissionalId), 
+          nome_cliente: modalNome, 
+          telefone_cliente: modalTelefone,
+          email_cliente: modalEmail,
+          data_hora_inicio: dataInicio.toISOString(), 
+          data_hora_fim: dataFim.toISOString(), 
+          status: 'confirmado' 
+      };
+
+      if (modalMode === 'new') {
+          const { error } = await supabase.from('agendamentos').insert(payload);
+          if (error) throw error;
+      } else {
+          const { error } = await supabase.from('agendamentos').update(payload).eq('id', selectedEvent.id);
+          if (error) throw error;
+      }
+
+      closeModal(); 
+      fetchAgendamentos(); // Refresh
+    } catch (e) { 
+        setModalError(e.message || "Erro ao salvar."); 
+    } finally { 
+        setIsSavingModal(false); 
+    }
   };
 
-  // Ordenar dias para a view de Cards
-  const diasOrdenados = Object.keys(agendamentosAgrupados).sort((a,b) => {
+  // --- CANCELAR ---
+  const handleModalCancel = async () => {
+    setIsSavingModal(true);
+    try {
+        await supabase.from('agendamentos')
+            .update({ status: 'cancelado', cancelamento_motivo: adminCancelReason })
+            .eq('id', selectedEvent.id);
+        
+        // Abre WhatsApp avisando
+        handleEnviarWhatsApp(selectedEvent, 'cancelamento');
+        
+        closeModal(); 
+        fetchAgendamentos();
+    } catch (e) { 
+        setModalError('Erro ao cancelar agendamento.'); 
+    } finally {
+        setIsSavingModal(false);
+    }
+  };
+
+  // =========================================================
+  //            RENDERIZAÇÃO: LISTA DE HOJE (DETALHADA)
+  // =========================================================
+  const renderListaHoje = () => {
+    const hojeStr = new Date().toLocaleDateString('pt-BR');
+    
+    // Filtra agendamentos de hoje
+    const agendamentosHoje = agendamentosRawState.filter(ag => {
+        const dataAg = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
+        const mesmoProf = !filtroProfissionalId || ag.profissional_id == filtroProfissionalId;
+        const naoCancelado = ag.status !== 'cancelado';
+        return dataAg === hojeStr && mesmoProf && naoCancelado;
+    });
+
+    return (
+        <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/60 border border-slate-100 overflow-hidden animate-in fade-in duration-500">
+            {/* Header da Lista */}
+            <div className="p-5 bg-gradient-to-r from-fuchsia-50 to-white border-b border-fuchsia-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="bg-fuchsia-100 p-2 rounded-lg text-fuchsia-600">📅</div>
+                    <div>
+                        <h2 className="text-lg font-black text-slate-800">Atendimentos de Hoje</h2>
+                        <p className="text-xs text-slate-500 font-bold uppercase">{hojeStr}</p>
+                    </div>
+                </div>
+
+                <div className="flex gap-2 w-full md:w-auto">
+                    {/* Botão Selecionar Todos */}
+                    <button 
+                        onClick={() => toggleSelectAllHoje(agendamentosHoje)} 
+                        className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition"
+                    >
+                        {selectedBulkIds.length === agendamentosHoje.length && agendamentosHoje.length > 0 ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                    </button>
+                    
+                    {/* Botão Finalizar Selecionados (Só aparece se tiver seleção) */}
+                    {selectedBulkIds.length > 0 && (
+                        <button 
+                            onClick={handleBulkFinish} 
+                            className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-green-200 animate-pulse transition transform active:scale-95"
+                        >
+                            <span>✓</span> Finalizar ({selectedBulkIds.length})
+                        </button>
+                    )}
+                    
+                    {/* Botão Novo Encaixe */}
+                    <button 
+                        onClick={() => handleSelectSlot({ start: new Date(), end: new Date() })} 
+                        className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md shadow-fuchsia-200 transition"
+                    >
+                        + Encaixe Rápido
+                    </button>
+                </div>
+            </div>
+            
+            {/* Corpo da Lista */}
+            {agendamentosHoje.length === 0 ? (
+                <div className="p-12 text-center flex flex-col items-center justify-center text-slate-400">
+                    <span className="text-4xl mb-2 opacity-20">☕</span>
+                    <p className="font-medium">Nenhum agendamento ativo para hoje.</p>
+                </div>
+            ) : (
+                <div className="divide-y divide-slate-50">
+                    {agendamentosHoje.map(ag => (
+                        <div key={ag.id} className={`p-4 flex flex-col md:flex-row items-center gap-4 hover:bg-slate-50/80 transition group ${ag.status === 'finalizado' ? 'opacity-60 grayscale' : ''}`}>
+                            
+                            {/* Checkbox */}
+                            <div className="flex items-center justify-center h-full pl-2">
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectedBulkIds.includes(ag.id)} 
+                                    onChange={() => toggleBulkSelect(ag.id)} 
+                                    className="w-5 h-5 rounded border-gray-300 text-fuchsia-600 focus:ring-fuchsia-500 cursor-pointer" 
+                                />
+                            </div>
+
+                            {/* Horário */}
+                            <div className="w-full md:w-20 text-center md:text-left">
+                                <span className="block text-xl font-black text-slate-700 tracking-tight">{formatarHora(ag.data_hora_inicio)}</span>
+                            </div>
+
+                            {/* Info Principal */}
+                            <div className="flex-1 w-full text-center md:text-left">
+                                <div className="flex flex-col md:flex-row items-center md:items-end gap-2 mb-1">
+                                    <h3 className="font-bold text-slate-800 text-lg leading-none">{ag.nome_cliente}</h3>
+                                    {ag.status === 'em_atendimento' && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-black rounded uppercase tracking-wide">Em Andamento</span>}
+                                    {ag.status === 'finalizado' && <span className="px-2 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-bold rounded uppercase">Concluído</span>}
+                                </div>
+                                <p className="text-sm text-slate-500 font-medium">
+                                    <span className="text-fuchsia-600 font-bold">{ag.servicos?.nome}</span> • <span className="opacity-80">{ag.profissionais?.nome}</span>
+                                </p>
+                            </div>
+
+                            {/* Ações Individuais */}
+                            <div className="flex items-center gap-2 w-full md:w-auto justify-center">
+                                {/* WhatsApp */}
+                                <button onClick={() => handleEnviarWhatsApp(ag, 'contato')} className="p-2 text-green-500 hover:bg-green-50 rounded-full transition" title="Enviar Whats">
+                                    💬
+                                </button>
+                                
+                                {/* Editar / Add Serviço */}
+                                <button onClick={() => handleSelectEvent(ag)} className="px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 hover:border-slate-300 transition shadow-sm">
+                                    Editar / Add Serviço
+                                </button>
+                                
+                                {/* Botão Concluir Individual */}
+                                {ag.status !== 'finalizado' && (
+                                    <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="px-3 py-2 bg-green-50 text-green-700 rounded-lg text-xs font-bold hover:bg-green-100 border border-green-100 transition">
+                                        Concluir
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+  };
+
+  // Ordenação para Cards
+  const diasOrdenadosCards = Object.keys(agendamentosAgrupados).sort((a,b) => {
       const [da, ma, aa] = a.split('/'); const [db, mb, ab] = b.split('/');
       return new Date(`${aa}-${ma}-${da}`) - new Date(`${ab}-${mb}-${db}`);
   });
 
-  if (authLoading || loading) return <div className="p-20 text-center animate-pulse text-fuchsia-600 font-bold">Carregando Agenda...</div>;
+  // --- RENDER FINAL ---
+  if (authLoading || loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><div className="animate-pulse flex flex-col items-center"><div className="w-12 h-12 bg-fuchsia-200 rounded-full mb-4"></div><p className="text-fuchsia-600 font-bold">Carregando Agenda...</p></div></div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-2 md:p-6 bg-slate-50 min-h-screen">
+    <div className="max-w-[1920px] mx-auto p-3 md:p-6 bg-slate-50 min-h-screen font-sans">
       
-      {/* HEADER E FILTROS */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-        <h1 className="text-3xl font-black text-slate-800 tracking-tight">Agenda Geral</h1>
+      {/* 1. HEADER E BARRA DE FERRAMENTAS */}
+      <div className="flex flex-col xl:flex-row justify-between items-center mb-6 gap-4 bg-white p-4 rounded-3xl shadow-sm border border-slate-100 sticky top-2 z-40">
+        <div>
+            <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                <span className="text-fuchsia-600">✦</span> Agenda Master
+            </h1>
+        </div>
         
-        <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
            {profile?.role === 'admin' && (
-             <select value={filtroProfissionalId} onChange={(e) => setFiltroProfissionalId(e.target.value)} className="bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold py-2 px-3 rounded-xl outline-none w-full md:w-auto">
+             <select 
+               value={filtroProfissionalId} 
+               onChange={(e) => setFiltroProfissionalId(e.target.value)} 
+               className="w-full md:w-auto bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-sm font-bold py-3 px-4 rounded-2xl outline-none transition cursor-pointer"
+             >
                <option value="">Todos os Profissionais</option>
                {allProfissionais.map(p => (<option key={p.id} value={p.id}>{p.nome}</option>))}
              </select>
            )}
            
-           <div className="flex bg-slate-100 rounded-xl p-1 w-full md:w-auto justify-center">
-             <button onClick={() => setViewMode('list_today')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'list_today' ? 'bg-white text-fuchsia-600 shadow' : 'text-slate-400'}`}>HOJE</button>
-             <button onClick={() => setViewMode('calendar')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'calendar' ? 'bg-white text-fuchsia-600 shadow' : 'text-slate-400'}`}>CALENDÁRIO</button>
-             <button onClick={() => setViewMode('cards')} className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-black transition-all ${viewMode === 'cards' ? 'bg-white text-fuchsia-600 shadow' : 'text-slate-400'}`}>CARDS</button>
+           <div className="flex bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto justify-center">
+             <button onClick={() => setViewMode('list_today')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-xs font-black transition-all ${viewMode === 'list_today' ? 'bg-white text-fuchsia-600 shadow-md transform scale-105' : 'text-slate-400 hover:text-slate-600'}`}>HOJE</button>
+             <button onClick={() => setViewMode('calendar')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-xs font-black transition-all ${viewMode === 'calendar' ? 'bg-white text-fuchsia-600 shadow-md transform scale-105' : 'text-slate-400 hover:text-slate-600'}`}>CALENDÁRIO</button>
+             <button onClick={() => setViewMode('cards')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-xs font-black transition-all ${viewMode === 'cards' ? 'bg-white text-fuchsia-600 shadow-md transform scale-105' : 'text-slate-400 hover:text-slate-600'}`}>CARDS</button>
            </div>
         </div>
       </div>
 
-      {/* =================================================================================
-          VIEW: CARDS (RESTAURADA E MELHORADA)
-         ================================================================================= */}
+      {/* 2. VIEWS (CONTEÚDO) */}
+      
+      {/* VIEW: LISTA HOJE */}
+      {viewMode === 'list_today' && renderListaHoje()}
+
+      {/* VIEW: CARDS (COM AVISOS PISCANDO) */}
       {viewMode === 'cards' && (
-        <div className="animate-in fade-in duration-500 space-y-8">
+        <div className="space-y-8 animate-in fade-in duration-500">
            
-           {/* SEÇÃO: AVISOS RÁPIDOS (PISCANDO) */}
+           {/* Seção Avisos Rápidos (Piscante) */}
            {proximosAgendamentos.length > 0 && (
-             <div className="bg-fuchsia-50/50 p-4 md:p-6 rounded-3xl border-2 border-fuchsia-100 shadow-sm relative overflow-hidden">
-                {/* Efeito Piscante na Borda/Container */}
-                <div className="absolute inset-0 border-2 border-fuchsia-300 rounded-3xl animate-pulse pointer-events-none"></div>
+             <div className="relative group overflow-hidden bg-white p-6 rounded-[2rem] border-2 border-fuchsia-100 shadow-sm">
+                <div className="absolute inset-0 border-4 border-fuchsia-200 rounded-[2rem] animate-pulse pointer-events-none opacity-50"></div>
                 
-                <h2 className="text-lg font-bold text-fuchsia-800 mb-4 flex items-center gap-2 relative z-10">
-                   <span className="text-2xl animate-bounce">🔔</span> Avisos Rápidos (Hoje e Amanhã)
+                <h2 className="text-xl font-black text-fuchsia-800 mb-4 flex items-center gap-2 relative z-10">
+                   <span className="text-2xl animate-bounce">🔔</span> Próximos Atendimentos (Urgente)
                 </h2>
                 
-                {/* Scroll Horizontal no Mobile */}
                 <div className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide snap-x relative z-10">
                    {proximosAgendamentos.map(ag => (
-                      <div key={`aviso-${ag.id}`} className="min-w-[280px] snap-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                      <div key={ag.id} className="min-w-[280px] snap-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition">
                          <div>
                             <div className="flex justify-between items-center mb-2">
-                               <span className="text-[10px] font-black uppercase text-slate-400">
-                                  {new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR', {weekday: 'short', day:'numeric'})}
-                               </span>
-                               <span className="bg-fuchsia-100 text-fuchsia-700 text-xs font-black px-2 py-1 rounded-md">
-                                  {formatarHora(ag.data_hora_inicio)}
-                               </span>
+                                <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-1 rounded">
+                                    {new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR', {weekday:'short', day:'numeric'})}
+                                </span>
+                                <span className="bg-fuchsia-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-sm shadow-fuchsia-200">
+                                    {formatarHora(ag.data_hora_inicio)}
+                                </span>
                             </div>
-                            <p className="font-bold text-slate-800 text-lg leading-tight truncate">{ag.nome_cliente}</p>
-                            <p className="text-xs text-slate-500 truncate mt-1">{ag.servicos?.nome}</p>
+                            <p className="font-bold text-slate-800 text-lg truncate">{ag.nome_cliente}</p>
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-wide mt-1">{ag.servicos?.nome}</p>
                          </div>
                          <div className="grid grid-cols-2 gap-2 mt-4">
-                            <button onClick={() => handleEnviarWhatsApp(ag, 'confirmacao')} className="py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-bold hover:bg-blue-100 border border-blue-100">Confirmar</button>
-                            <button onClick={() => handleEnviarWhatsApp(ag, 'lembrete')} className="py-2 rounded-lg bg-green-50 text-green-600 text-xs font-bold hover:bg-green-100 border border-green-100">Lembrar</button>
+                            <button onClick={() => handleEnviarWhatsApp(ag, 'confirmacao')} className="py-2.5 bg-blue-50 text-blue-600 text-xs font-bold rounded-xl hover:bg-blue-100 transition">Confirmar</button>
+                            <button onClick={() => handleEnviarWhatsApp(ag, 'lembrete')} className="py-2.5 bg-green-50 text-green-600 text-xs font-bold rounded-xl hover:bg-green-100 transition">Lembrar</button>
                          </div>
                       </div>
                    ))}
@@ -367,79 +723,55 @@ function AdminAgenda() {
              </div>
            )}
 
-           {/* SEÇÃO: GRIDS POR DIA */}
-           <div className="space-y-8">
-              {diasOrdenados.length === 0 ? (
-                 <div className="text-center p-10 text-slate-400 font-medium">Nenhum agendamento encontrado.</div>
-              ) : (
-                 diasOrdenados.map(dia => (
-                    <div key={dia}>
-                       <h3 className="text-xl font-bold text-fuchsia-800 mb-4 border-b border-fuchsia-100 pb-2 capitalize">
-                          {formatarDataCabecalho(dia)}
-                       </h3>
-                       
-                       {/* GRID RESPONSIVO: 1 coluna no mobile, 2 no tablet, 3 ou 4 no desktop */}
-                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                          {agendamentosAgrupados[dia].map(ag => (
-                             <div key={ag.id} className={`bg-white rounded-2xl p-5 shadow-sm border-l-[6px] flex flex-col justify-between relative transition-all hover:shadow-lg hover:-translate-y-1 ${ag.status === 'em_atendimento' ? 'border-amber-400 bg-amber-50/30' : 'border-fuchsia-500'}`}>
-                                
-                                {/* Botão Editar Flutuante */}
-                                <button onClick={() => handleSelectEvent(ag)} className="absolute top-4 right-4 text-slate-300 hover:text-fuchsia-600 transition">✎</button>
+           {/* Grids de Cards por Dia */}
+           {diasOrdenadosCards.map(dia => (
+              <div key={dia}>
+                 <div className="flex items-center gap-4 mb-4 mt-8">
+                     <h3 className="text-2xl font-black text-slate-700 capitalize tracking-tight">{formatarDataCabecalho(dia)}</h3>
+                     <div className="h-1 flex-1 bg-slate-100 rounded-full"></div>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+                    {agendamentosAgrupados[dia].map(ag => (
+                       <div key={ag.id} className={`bg-white rounded-[1.5rem] p-5 shadow-sm border-l-[6px] relative transition hover:-translate-y-1 hover:shadow-lg ${ag.status === 'em_atendimento' ? 'border-amber-400 bg-amber-50/50' : 'border-fuchsia-500'}`}>
+                          
+                          {/* Botão Editar Absoluto */}
+                          <button onClick={() => handleSelectEvent(ag)} className="absolute top-4 right-4 text-slate-300 hover:text-fuchsia-600 bg-white rounded-full p-1 hover:bg-slate-100 transition">✎</button>
+                          
+                          <div className="flex items-center gap-3 mb-3">
+                              <span className="text-3xl font-black text-slate-700 tracking-tighter">{formatarHora(ag.data_hora_inicio)}</span>
+                          </div>
+                          
+                          <h4 className="font-bold text-lg text-slate-800 leading-tight capitalize mb-1">{ag.nome_cliente}</h4>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{ag.servicos?.nome}</p>
+                          <p className="text-xs text-slate-400 mt-1">Prof: {ag.profissionais?.nome}</p>
 
-                                <div>
-                                   <div className="flex items-center gap-3 mb-3">
-                                      <span className="text-2xl font-black text-slate-700 tracking-tighter">{formatarHora(ag.data_hora_inicio)}</span>
-                                      {/* Ícone de Telefone */}
-                                      <button onClick={() => handleEnviarWhatsApp(ag, 'contato')} className="bg-green-100 text-green-600 p-1.5 rounded-full hover:bg-green-200 transition">
-                                        📞
-                                      </button>
-                                   </div>
-
-                                   <h4 className="font-bold text-lg text-slate-800 leading-tight capitalize">{ag.nome_cliente}</h4>
-                                   <p className="text-sm text-slate-500 font-medium mt-1">{ag.servicos?.nome}</p>
-                                   
-                                   <div className="mt-3 flex items-center gap-2">
-                                      <div className="h-[1px] flex-1 bg-slate-100"></div>
-                                      <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{ag.profissionais?.nome}</span>
-                                   </div>
-                                </div>
-
-                                {/* Botão de Ação Principal */}
-                                <div className="mt-5">
-                                   {ag.status === 'confirmado' && (
-                                      <button onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg shadow-amber-200 transition-all active:scale-95">
-                                         Iniciar Atendimento
-                                      </button>
-                                   )}
-                                   {ag.status === 'em_atendimento' && (
-                                      <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-200 transition-all active:scale-95 animate-pulse">
-                                         Finalizar
-                                      </button>
-                                   )}
-                                   {ag.status === 'finalizado' && (
-                                      <div className="w-full py-2 bg-slate-100 text-slate-400 font-bold rounded-xl text-center text-sm">Concluído</div>
-                                   )}
-                                </div>
-                             </div>
-                          ))}
+                          <div className="mt-6 pt-4 border-t border-slate-100/50">
+                             {ag.status === 'confirmado' && (
+                                <button onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} className="w-full py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition transform active:scale-95">
+                                    ▶ Iniciar Atendimento
+                                </button>
+                             )}
+                             {ag.status === 'em_atendimento' && (
+                                <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="w-full py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg shadow-green-200 animate-pulse hover:bg-green-700 transition transform active:scale-95">
+                                    ✓ Finalizar
+                                </button>
+                             )}
+                             {ag.status === 'finalizado' && (
+                                <div className="w-full py-2 bg-slate-100 text-slate-400 font-bold rounded-xl text-center text-xs uppercase tracking-widest">Concluído</div>
+                             )}
+                          </div>
                        </div>
-                    </div>
-                 ))
-              )}
-           </div>
+                    ))}
+                 </div>
+              </div>
+           ))}
         </div>
       )}
 
-      {/* =================================================================================
-          VIEW: LISTA HOJE
-         ================================================================================= */}
-      {viewMode === 'list_today' && renderListaHoje()}
-
-      {/* =================================================================================
-          VIEW: CALENDÁRIO
-         ================================================================================= */}
+      {/* VIEW: CALENDÁRIO (BIGCALENDAR) */}
       {viewMode === 'calendar' && (
-        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 h-[80vh] p-2 md:p-6 overflow-hidden">
+        <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 h-[85vh] p-2 md:p-6 overflow-hidden animate-in zoom-in-95 duration-300">
            <Calendar
               localizer={localizer}
               events={eventosCalendario}
@@ -450,71 +782,140 @@ function AdminAgenda() {
               selectable
               onSelectSlot={handleSelectSlot} 
               onSelectEvent={handleSelectEvent}
-              components={{ event: EventoPersonalizado }}
+              components={{ event: EventoCalendario }}
               messages={messages}
               culture="pt-BR"
               min={new Date(0, 0, 0, 7, 0, 0)}
               max={new Date(0, 0, 0, 21, 0, 0)}
-              className="text-xs md:text-sm font-sans"
+              step={30} // Slots de 30min
+              timeslots={1} // Importante para visual
+              className="font-sans text-xs custom-calendar-height"
             />
         </div>
       )}
 
-      {/* STYLE CUSTOMIZADO PARA CALENDÁRIO */}
+      {/* CSS CRÍTICO INJETADO: Corrige o "Embaralhado" do Calendário */}
       <style>{`
-        .rbc-header { padding: 12px 0; font-weight: 800; color: #64748b; font-size: 11px; text-transform: uppercase; }
-        .rbc-today { background-color: #fdf4ff; }
-        .rbc-event { background: transparent; padding: 0; }
-        .rbc-timeslot-group { min-height: 60px; } 
-        /* Esconde scrollbar horizontal nos cards mobile */
+        /* Força altura mínima para cada slot de 30min */
+        .rbc-timeslot-group { min-height: 80px !important; border-bottom: 1px solid #f1f5f9 !important; }
+        
+        /* Limpeza Visual do Calendário */
+        .rbc-header { padding: 15px 0 !important; font-weight: 900 !important; color: #94a3b8; font-size: 11px; text-transform: uppercase; border-bottom: none !important; letter-spacing: 0.05em; }
+        .rbc-day-bg + .rbc-day-bg { border-left: 1px solid #f1f5f9 !important; }
+        .rbc-time-view { border: none !important; }
+        .rbc-time-content { border-top: 1px solid #f1f5f9 !important; }
+        .rbc-today { background-color: #fdf4ff !important; }
+        .rbc-event { background: transparent !important; padding: 0 !important; width: 100% !important; box-shadow: none !important; }
+        .rbc-day-slot .rbc-event { border: none !important; }
+        .rbc-event-label { display: none !important; }
+        .rbc-time-slot { font-size: 10px; font-weight: bold; color: #cbd5e1; }
+        
+        /* Ocultar scrollbar nos cards horizontais */
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      {/* =================================================================================
-          MODAL (MANTIDO 100% IGUAL)
-         ================================================================================= */}
-      <Modal isOpen={modalIsOpen} onRequestClose={closeModal} className="Modal w-full max-w-lg mx-auto outline-none mt-10 p-4" overlayClassName="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex justify-center items-start overflow-y-auto">
+      {/* =========================================================
+                      MODAL (GERAL) - RESTAURADO COMPLETO
+         ========================================================= */}
+      <Modal isOpen={modalIsOpen} onRequestClose={closeModal} className="Modal w-full max-w-lg mx-auto outline-none mt-4 md:mt-10 p-4" overlayClassName="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex justify-center items-start overflow-y-auto">
         {selectedEvent && (
-          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden w-full relative">
-             <div className="bg-fuchsia-600 p-5 flex justify-between items-center text-white">
-                <h2 className="text-xl font-black">{modalMode === 'new' ? 'Novo Agendamento' : 'Editar Cliente'}</h2>
-                <button onClick={closeModal} className="text-2xl font-bold opacity-70 hover:opacity-100">&times;</button>
+          <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden w-full relative animate-in zoom-in-95 duration-200">
+             
+             {/* Header do Modal */}
+             <div className="bg-fuchsia-600 p-6 flex justify-between items-start text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-10 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+                <div className="relative z-10">
+                   <h2 className="text-2xl font-black tracking-tight">{modalMode === 'new' ? 'Novo Agendamento' : 'Detalhes do Cliente'}</h2>
+                   <p className="text-fuchsia-100 text-sm font-medium opacity-80">{modalMode === 'new' ? 'Preencha os dados abaixo' : 'Gerencie o atendimento'}</p>
+                </div>
+                <button onClick={closeModal} className="relative z-10 text-2xl font-bold opacity-70 hover:opacity-100 bg-black/10 hover:bg-black/20 w-8 h-8 rounded-full flex items-center justify-center transition">&times;</button>
              </div>
              
-             <div className="p-6 space-y-4">
-                {modalMode === 'edit' && !showCancelOptions && (
-                  <div className="flex gap-2 mb-2">
-                     <button onClick={() => handleEnviarWhatsApp({ ...selectedEvent, telefone_cliente: modalTelefone }, 'confirmacao')} className="flex-1 py-3 bg-blue-50 text-blue-600 font-bold rounded-xl text-sm hover:bg-blue-100 transition">📲 Confirmar</button>
-                     <button onClick={() => handleEnviarWhatsApp({ ...selectedEvent, telefone_cliente: modalTelefone }, 'lembrete')} className="flex-1 py-3 bg-green-50 text-green-600 font-bold rounded-xl text-sm hover:bg-green-100 transition">⏰ Lembrar</button>
-                  </div>
-                )}
-
-                {!showCancelOptions ? (
-                  <>
-                     <input type="text" placeholder="Nome do Cliente" value={modalNome} onChange={e => setModalNome(e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border-none outline-none font-bold text-slate-700 ring-1 ring-slate-200 focus:ring-2 focus:ring-fuchsia-500" />
-                     <div className="grid grid-cols-2 gap-3">
-                        <select value={modalServicoId} onChange={e => setModalServicoId(e.target.value)} className="p-4 bg-slate-50 rounded-xl outline-none ring-1 ring-slate-200"><option value="">Serviço...</option>{allServicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select>
-                        <select value={modalProfissionalId} onChange={e => setModalProfissionalId(e.target.value)} className="p-4 bg-slate-50 rounded-xl outline-none ring-1 ring-slate-200"><option value="">Profissional...</option>{allProfissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
-                     </div>
-                     <input type="tel" placeholder="Telefone" value={modalTelefone} onChange={e => setModalTelefone(e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border-none outline-none ring-1 ring-slate-200" />
+             <div className="p-6 md:p-8 space-y-5">
+                
+                {/* 1. SELEÇÃO DE AÇÃO DE CANCELAMENTO (Tela Secundária) */}
+                {showCancelOptions ? (
+                  <div className="bg-red-50 p-6 rounded-3xl text-center border border-red-100 animate-in fade-in">
+                     <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🗑️</div>
+                     <h3 className="text-red-900 font-black text-lg mb-2">Cancelar Agendamento?</h3>
+                     <p className="text-red-700 text-sm mb-4">Selecione o motivo para enviarmos ao cliente via WhatsApp.</p>
                      
-                     <div className="flex gap-3 pt-4">
-                        {modalMode === 'edit' && <button onClick={() => setShowCancelOptions(true)} className="px-4 text-red-500 font-bold bg-red-50 rounded-xl">Excluir</button>}
-                        <button onClick={handleModalSave} className="flex-1 py-4 bg-fuchsia-600 text-white font-black rounded-xl hover:bg-fuchsia-700 transition">{isSavingModal ? '...' : 'Salvar'}</button>
+                     <select value={adminCancelReason} onChange={e => setAdminCancelReason(e.target.value)} className="w-full p-4 border border-red-200 bg-white rounded-2xl mb-4 text-sm outline-none focus:ring-2 focus:ring-red-200">
+                        {MOTIVOS_ADMIN.map(m => <option key={m} value={m}>{m}</option>)}
+                     </select>
+                     
+                     <div className="flex gap-3">
+                        <button onClick={() => setShowCancelOptions(false)} className="flex-1 py-3 bg-white text-gray-500 rounded-xl font-bold border border-gray-200 hover:bg-gray-50">Voltar</button>
+                        <button onClick={handleModalCancel} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 hover:bg-red-700">Confirmar</button>
+                     </div>
+                  </div>
+                ) : (
+                  <>
+                     {/* 2. FORMULÁRIO PRINCIPAL */}
+                     {/* Inputs de Dados */}
+                     <div className="space-y-4">
+                         <div className="relative">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 mb-1 block">Nome do Cliente</label>
+                            <input type="text" value={modalNome} onChange={e => setModalNome(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700 ring-1 ring-slate-200 focus:ring-2 focus:ring-fuchsia-500 transition" placeholder="Ex: Maria Silva" />
+                         </div>
+
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 mb-1 block">Serviço</label>
+                                <select value={modalServicoId} onChange={e => setModalServicoId(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-medium text-sm focus:ring-2 focus:ring-fuchsia-500"><option value="">Selecione...</option>{allServicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 mb-1 block">Profissional</label>
+                                <select value={modalProfissionalId} onChange={e => setModalProfissionalId(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-medium text-sm focus:ring-2 focus:ring-fuchsia-500"><option value="">Selecione...</option>{allProfissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select>
+                            </div>
+                         </div>
+                         
+                         <div>
+                             <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 mb-1 block">Contato</label>
+                             <input type="tel" value={modalTelefone} onChange={e => setModalTelefone(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-fuchsia-500 transition font-mono text-sm" placeholder="(99) 99999-9999" />
+                         </div>
+                     </div>
+
+                     {/* Área de Remarcação (Só Admin ou Modo Edição) */}
+                     {modalMode === 'edit' && profile?.role === 'admin' && (
+                        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+                           <button type="button" onClick={() => setShowRemarcar(!showRemarcar)} className="w-full flex justify-between items-center text-amber-800 text-xs font-bold uppercase tracking-wide">
+                              <span>📅 Remarcar Horário?</span>
+                              <span>{showRemarcar ? '▲' : '▼'}</span>
+                           </button>
+                           
+                           {showRemarcar && (
+                              <div className="mt-4 grid grid-cols-2 gap-3 animate-in fade-in">
+                                 <div>
+                                    <label className="text-[10px] font-bold text-amber-700 uppercase">Nova Data</label>
+                                    <DatePicker selected={novaData} onChange={buscarHorariosParaRemarcar} minDate={new Date()} dateFormat="dd/MM/yyyy" className="w-full p-2 rounded-lg border border-amber-200 text-sm text-center" />
+                                 </div>
+                                 <div>
+                                    <label className="text-[10px] font-bold text-amber-700 uppercase">Novo Horário</label>
+                                    <select onChange={e => setNovoHorarioSelecionado(e.target.value)} className="w-full p-2 rounded-lg border border-amber-200 text-sm bg-white h-[38px]" disabled={loadingNovosHorarios}>
+                                       <option>{loadingNovosHorarios ? 'Buscando...' : 'Selecione...'}</option>
+                                       {novosHorarios.map(h => (<option key={h} value={h.toISOString()}>{format(h, 'HH:mm')}</option>))}
+                                    </select>
+                                 </div>
+                              </div>
+                           )}
+                        </div>
+                     )}
+
+                     {/* Botões de Ação do Rodapé */}
+                     <div className="flex gap-3 pt-2">
+                        {modalMode === 'edit' && (
+                           <button type="button" onClick={() => setShowCancelOptions(true)} className="px-5 py-4 text-red-500 font-bold text-sm bg-red-50 rounded-2xl hover:bg-red-100 transition border border-red-100">Excluir</button>
+                        )}
+                        <button type="button" onClick={handleModalSave} className="flex-1 py-4 bg-fuchsia-600 text-white font-black rounded-2xl shadow-xl shadow-fuchsia-200 hover:bg-fuchsia-700 hover:scale-[1.02] transition">
+                           {isSavingModal ? 'Salvando...' : (modalMode === 'new' ? 'Agendar Agora' : 'Salvar Alterações')}
+                        </button>
                      </div>
                   </>
-                ) : (
-                  <div className="bg-red-50 p-4 rounded-xl text-center">
-                     <p className="text-red-800 font-bold mb-3">Confirmar Cancelamento?</p>
-                     <select value={adminCancelReason} onChange={e => setAdminCancelReason(e.target.value)} className="w-full p-3 border rounded-xl mb-3"><option>Selecione motivo...</option>{MOTIVOS_ADMIN.map(m => <option key={m} value={m}>{m}</option>)}</select>
-                     <div className="flex gap-2">
-                        <button onClick={() => setShowCancelOptions(false)} className="flex-1 py-3 bg-white text-gray-600 rounded-xl font-bold">Voltar</button>
-                        <button onClick={handleModalCancel} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold">Confirmar</button>
-                     </div>
-                  </div>
                 )}
-                {modalError && <p className="text-red-500 text-center font-bold text-sm">{modalError}</p>}
+                
+                {modalError && <div className="text-center p-3 bg-red-100 text-red-600 rounded-xl text-xs font-bold animate-pulse">{modalError}</div>}
              </div>
           </div>
         )}
