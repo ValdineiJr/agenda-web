@@ -353,6 +353,148 @@ function AdminAgenda() {
     }
   };
 
+  const buscarHorariosParaRemarcar = async (data) => {
+    setLoadingNovosHorarios(true); setNovosHorarios([]); setNovoHorarioSelecionado(null); setNovaData(data);
+    const profId = parseInt(modalProfissionalId); const servId = parseInt(modalServicoId);
+    if (!profId || !servId) { setModalError("Selecione serviço e profissional."); setLoadingNovosHorarios(false); return; }
+    
+    const servico = allServicos.find(s => s.id === servId);
+    const { data: trab } = await supabase.from('horarios_trabalho').select('hora_inicio, hora_fim').eq('dia_semana', data.getDay()).eq('profissional_id', profId).single();
+    if (!trab) { setLoadingNovosHorarios(false); return; }
+    
+    const dIni = new Date(data); dIni.setHours(0,0,0,0); const dFim = new Date(data); dFim.setHours(23,59,59);
+    const { data: ags } = await supabase.from('agendamentos').select('data_hora_inicio, data_hora_fim').gte('data_hora_inicio', dIni.toISOString()).lte('data_hora_fim', dFim.toISOString()).eq('profissional_id', profId).neq('status', 'cancelado').neq('id', selectedEvent?.id || 0);
+    
+    const slots = [];
+    const [hI, mI] = trab.hora_inicio.split(':'); const [hF, mF] = trab.hora_fim.split(':');
+    let curr = new Date(data); curr.setHours(hI, mI, 0, 0); const limit = new Date(data); limit.setHours(hF, mF, 0, 0);
+    
+    while (curr < limit) {
+      const slotEnd = new Date(curr.getTime() + servico.duracao_minutos * 60000);
+      if (slotEnd > limit) break;
+      if (curr > new Date()) {
+        if (!ags?.some(a => { const ai=new Date(a.data_hora_inicio), af=new Date(a.data_hora_fim); return (curr>=ai && curr<af) || (slotEnd>ai && slotEnd<=af); })) slots.push(new Date(curr));
+      }
+      curr = new Date(curr.getTime() + servico.duracao_minutos * 60000);
+    }
+    setNovosHorarios(slots); setLoadingNovosHorarios(false);
+  };
+
+  // --- FUNÇÃO RECUPERADA: RENDERIZAR LISTA DE HOJE ---
+  const renderListaHoje = () => {
+    const hojeStr = new Date().toLocaleDateString('pt-BR');
+    const agendamentosHoje = agendamentosRawState.filter(ag => {
+        const dataAg = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
+        const isHoje = dataAg === hojeStr;
+        const isAtivo = ag.status === 'confirmado' || ag.status === 'em_atendimento';
+        if (filtroProfissionalId) return isHoje && isAtivo && ag.profissional_id == filtroProfissionalId;
+        return isHoje && isAtivo;
+    });
+
+    const porProfissional = agendamentosHoje.reduce((acc, ag) => {
+        const nomeProf = ag.profissionais?.nome || 'Sem Profissional';
+        if (!acc[nomeProf]) acc[nomeProf] = [];
+        acc[nomeProf].push(ag);
+        return acc;
+    }, {});
+
+    if (agendamentosHoje.length === 0) {
+        return (
+            <div className="text-center p-10 bg-white rounded-xl shadow-sm border border-gray-100">
+                <p className="text-gray-500 mb-4">Nenhum agendamento pendente para hoje.</p>
+                <button onClick={handleAdicionarExtraHoje} className="bg-fuchsia-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-fuchsia-700 transition">
+                    + Incluir Serviço Extra (Hoje)
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-8 animate-fade-in">
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-fuchsia-100">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800">Agendamentos de Hoje</h2>
+                    <p className="text-sm text-gray-500">{hojeStr}</p>
+                </div>
+                <div className="flex gap-3">
+                    <button onClick={handleAdicionarExtraHoje} className="bg-white border border-fuchsia-600 text-fuchsia-600 px-4 py-2 rounded-lg font-bold hover:bg-fuchsia-50 transition">
+                        + Serviço Extra (Novo)
+                    </button>
+                    {selectedBulkIds.length > 0 && (
+                        <button onClick={handleBulkFinish} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 transition shadow-md animate-pulse">
+                            ✅ Finalizar Selecionados ({selectedBulkIds.length})
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {Object.keys(porProfissional).map(profNome => (
+                <div key={profNome} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
+                    <div className="bg-fuchsia-50 p-4 border-b border-fuchsia-100 flex justify-between items-center">
+                        <h3 className="font-bold text-fuchsia-800">{profNome}</h3>
+                        <span className="text-xs font-semibold bg-white text-fuchsia-600 px-2 py-1 rounded-full border border-fuchsia-200">
+                            {porProfissional[profNome].length} clientes
+                        </span>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                        {porProfissional[profNome].map(ag => (
+                            <div key={ag.id} className="p-4 flex flex-col md:flex-row items-center gap-4 hover:bg-gray-50 transition">
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectedBulkIds.includes(ag.id)}
+                                    onChange={() => toggleBulkSelect(ag.id)}
+                                    className="w-5 h-5 text-fuchsia-600 rounded focus:ring-fuchsia-500 cursor-pointer"
+                                />
+                                <div className="min-w-[80px] text-center">
+                                    <span className="block text-lg font-bold text-gray-700">{formatarHora(ag.data_hora_inicio)}</span>
+                                    {ag.status === 'em_atendimento' && (
+                                        <span className="text-[10px] uppercase font-bold text-amber-600 bg-amber-100 px-1 rounded">Em Andamento</span>
+                                    )}
+                                </div>
+                                <div className="flex-1 text-center md:text-left">
+                                    <p className="font-bold text-gray-800">{ag.nome_cliente}</p>
+                                    <p className="text-sm text-gray-500">{ag.servicos?.nome}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => handleAdicionarServicoParaCliente(ag)}
+                                        className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm font-bold hover:bg-purple-200 transition"
+                                        title="Adicionar Serviço Extra para este cliente"
+                                    >
+                                        + Serviço
+                                    </button>
+
+                                    <button 
+                                        onClick={() => handleEnviarWhatsApp(ag, 'contato')}
+                                        className="p-2 bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition"
+                                        title="Chamar no WhatsApp"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                    </button>
+                                    
+                                    <button 
+                                        onClick={() => handleSelectEvent({ resource: ag })}
+                                        className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition"
+                                    >
+                                        Editar
+                                    </button>
+
+                                    <button 
+                                        onClick={() => handleUpdateStatus(ag.id, 'finalizado')}
+                                        className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition shadow-sm"
+                                    >
+                                        Finalizar
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+  };
+
   const eventStyleGetter = (event, start, end, isSelected) => {
     return {
       style: {
@@ -486,7 +628,7 @@ function AdminAgenda() {
         </div>
       )}
 
-      {/* MODAL */}
+      {/* MODAL (FORMULÁRIO DE EDIÇÃO/CRIAÇÃO) */}
       <Modal isOpen={modalIsOpen} onRequestClose={closeModal} className="Modal" overlayClassName="ModalOverlay">
         {selectedEvent && (
           <form onSubmit={(e) => { e.preventDefault(); handleModalSave(); }} className="flex flex-col h-full">
