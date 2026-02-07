@@ -29,8 +29,8 @@ const localizer = dateFnsLocalizer({
 const messages = {
   allDay: 'Dia Inteiro', previous: 'Anterior', next: 'Próximo',
   today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia',
-  agenda: 'Agenda', date: 'Data', time: 'Hora', event: 'Evento',
-  noEventsInRange: 'Não há eventos neste período.', showMore: (total) => `+ Ver mais (${total})`,
+  agenda: 'Lista', date: 'Data', time: 'Hora', event: 'Evento',
+  noEventsInRange: 'Sem agendamentos neste período.', showMore: (total) => `+${total} mais`,
 };
 
 const MOTIVOS_ADMIN = [
@@ -49,41 +49,88 @@ function formatarHora(dataISO) {
 }
 
 // =========================================================
-//    COMPONENTE DE EVENTO COM TOOLTIP (CORRIGIDO)
+//    COMPONENTE DE EVENTO (DESIGN MODERNO)
 // =========================================================
 const EventoPersonalizado = ({ event }) => {
   const isEmAtendimento = event.resource.status === 'em_atendimento';
-  const bgClass = isEmAtendimento ? 'bg-amber-100 border-amber-500 text-amber-900' : 'bg-fuchsia-100 border-fuchsia-500 text-fuchsia-900';
   
+  // Cores dinâmicas baseadas no status
+  const containerClass = isEmAtendimento 
+    ? 'bg-amber-50 border-l-4 border-amber-500 text-amber-900' 
+    : 'bg-white border-l-4 border-fuchsia-600 text-gray-700';
+
   return (
-    <div className="relative group h-full text-xs font-sans">
-      <div className={`h-full w-full rounded border-l-4 p-1 px-2 shadow-sm transition-all hover:brightness-95 ${bgClass} overflow-hidden flex flex-col justify-start`}>
+    <div className="relative group h-full w-full font-sans">
+      
+      {/* --- CARD VISUAL (Calendário) --- */}
+      <div className={`h-full w-full rounded-r-md p-1.5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden leading-tight ${containerClass}`}>
+        
+        {/* Cabeçalho do Card (Hora + Status) */}
         <div className="flex justify-between items-center mb-0.5">
-           <span className="font-bold">{format(event.start, 'HH:mm')}</span>
-           {isEmAtendimento && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="Em Atendimento"></span>}
+           <span className={`text-[10px] font-bold ${isEmAtendimento ? 'text-amber-700' : 'text-fuchsia-600'}`}>
+             {format(event.start, 'HH:mm')}
+           </span>
+           {isEmAtendimento && (
+             <span className="flex h-2 w-2 relative">
+               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+               <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+             </span>
+           )}
         </div>
-        <div className="font-semibold truncate">{event.resource.servicos?.nome}</div>
-        <div className="font-light truncate opacity-80">{event.resource.nome_cliente.split(' ')[0]}</div>
+
+        {/* Corpo do Card (Cliente + Serviço) */}
+        <div className="flex-1 min-h-0 flex flex-col justify-center">
+            <div className="font-extrabold text-xs truncate" title={event.resource.nome_cliente}>
+              {event.resource.nome_cliente.split(' ')[0]} {/* Primeiro nome */}
+            </div>
+            <div className="text-[10px] opacity-80 truncate" title={event.resource.servicos?.nome}>
+              {event.resource.servicos?.nome}
+            </div>
+        </div>
       </div>
 
-      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 w-64 bg-white p-4 rounded-xl shadow-2xl border border-gray-200 animate-fade-in pointer-events-none">
-         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-200"></div>
-         <div className="relative z-50 text-left">
-            <div className="flex items-center gap-3 mb-3 border-b border-gray-100 pb-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg uppercase shrink-0 ${isEmAtendimento ? 'bg-amber-500' : 'bg-fuchsia-600'}`}>
+      {/* --- TOOLTIP FLUTUANTE (Mantido e Melhorado) --- */}
+      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-[9999] w-72 bg-white p-4 rounded-xl shadow-2xl border border-gray-100 animate-fade-in pointer-events-none ring-1 ring-black/5">
+         
+         {/* Seta do Tooltip */}
+         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-100"></div>
+         
+         <div className="relative z-50 text-left space-y-3">
+            {/* Cabeçalho do Tooltip */}
+            <div className="flex items-center gap-3 border-b border-gray-50 pb-3">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl uppercase shrink-0 shadow-md ${isEmAtendimento ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-fuchsia-500 to-purple-600'}`}>
                   {event.resource.nome_cliente.charAt(0)}
                 </div>
                 <div className="overflow-hidden">
-                  <p className="font-bold text-gray-800 leading-tight truncate">{event.resource.nome_cliente}</p>
-                  <p className="text-xs text-gray-500 truncate">{event.resource.telefone_cliente || 'Sem telefone'}</p>
+                  <p className="font-bold text-gray-800 text-lg leading-tight truncate">{event.resource.nome_cliente}</p>
+                  <p className="text-xs text-gray-400 font-medium truncate flex items-center gap-1">
+                    📱 {event.resource.telefone_cliente || 'Sem telefone'}
+                  </p>
                 </div>
             </div>
-            <div className="space-y-1.5 text-sm text-gray-600">
-                <p><span className="font-bold text-xs uppercase text-gray-400 block">Serviço:</span> {event.resource.servicos?.nome}</p>
-                <p><span className="font-bold text-xs uppercase text-gray-400 block">Profissional:</span> {event.resource.profissionais?.nome}</p>
-                <p><span className="font-bold text-xs uppercase text-gray-400 block">Horário:</span> {format(event.start, 'HH:mm')} às {format(event.end, 'HH:mm')}</p>
-                {event.resource.status === 'em_atendimento' && (
-                   <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded">EM ATENDIMENTO</span>
+
+            {/* Detalhes */}
+            <div className="space-y-2 text-sm text-gray-600">
+                <div className="bg-gray-50 p-2 rounded-lg">
+                  <span className="font-bold text-xs uppercase text-gray-400 block mb-0.5">Serviço</span>
+                  <span className="font-semibold text-gray-800">{event.resource.servicos?.nome}</span>
+                </div>
+                
+                <div className="flex gap-2">
+                   <div className="bg-gray-50 p-2 rounded-lg flex-1">
+                      <span className="font-bold text-xs uppercase text-gray-400 block mb-0.5">Profissional</span>
+                      <span className="text-gray-800">{event.resource.profissionais?.nome}</span>
+                   </div>
+                   <div className="bg-gray-50 p-2 rounded-lg flex-1">
+                      <span className="font-bold text-xs uppercase text-gray-400 block mb-0.5">Horário</span>
+                      <span className="text-gray-800">{format(event.start, 'HH:mm')} - {format(event.end, 'HH:mm')}</span>
+                   </div>
+                </div>
+
+                {isEmAtendimento && (
+                   <div className="mt-2 text-center bg-amber-100 text-amber-800 py-1 rounded font-bold text-xs border border-amber-200">
+                     ⚠️ EM ATENDIMENTO AGORA
+                   </div>
                 )}
             </div>
          </div>
@@ -93,7 +140,7 @@ const EventoPersonalizado = ({ event }) => {
 };
 
 // =========================================================
-//               COMPONENTE PRINCIPAL
+//               COMPONENTE PRINCIPAL (AGENDA)
 // =========================================================
 function AdminAgenda() {
   const { profile, loading: authLoading } = useAuth(); 
@@ -102,15 +149,9 @@ function AdminAgenda() {
   const [agendamentosRawState, setAgendamentosRawState] = useState([]); 
   const [agendamentosAgrupados, setAgendamentosAgrupados] = useState({});
   const [eventosCalendario, setEventosCalendario] = useState([]);
-  const [canceladosAgrupados, setCanceladosAgrupados] = useState({});
-  const [finalizadosAgrupados, setFinalizadosAgrupados] = useState({});
   const [proximosAgendamentos, setProximosAgendamentos] = useState([]);
 
   // Controle
-  const [showCancelados, setShowCancelados] = useState(false);
-  const [showFinalizados, setShowFinalizados] = useState(false);
-  const [totalCancelados, setTotalCancelados] = useState(0);
-  const [totalFinalizados, setTotalFinalizados] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('calendar'); 
@@ -128,6 +169,7 @@ function AdminAgenda() {
   const [allServicos, setAllServicos] = useState([]);
   const [allProfissionais, setAllProfissionais] = useState([]);
   
+  // Formulário Modal
   const [modalServicoId, setModalServicoId] = useState('');
   const [modalProfissionalId, setModalProfissionalId] = useState('');
   const [modalNome, setModalNome] = useState('');
@@ -189,8 +231,6 @@ function AdminAgenda() {
       setProximosAgendamentos(ativos.filter(ag => {
          const d = new Date(ag.data_hora_inicio); return d >= agora && d < limiteAmanha && ag.status === 'confirmado';
       }));
-
-      setTotalCancelados(cancelados.length); setTotalFinalizados(finalizados.length); 
       
       const agruparPorDia = (lista) => lista.reduce((acc, ag) => {
           const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
@@ -198,11 +238,13 @@ function AdminAgenda() {
       }, {});
 
       setAgendamentosAgrupados(agruparPorDia(ativos));
-      setCanceladosAgrupados(agruparPorDia(cancelados));
-      setFinalizadosAgrupados(agruparPorDia(finalizados));
 
       setEventosCalendario(ativos.map(ag => ({
-        title: `${formatarHora(ag.data_hora_inicio)} - ${ag.servicos?.nome}`, start: new Date(ag.data_hora_inicio), end: new Date(ag.data_hora_fim), resource: ag, status: ag.status 
+        title: `${formatarHora(ag.data_hora_inicio)} - ${ag.servicos?.nome}`, 
+        start: new Date(ag.data_hora_inicio), 
+        end: new Date(ag.data_hora_fim), 
+        resource: ag, 
+        status: ag.status 
       })));
     }
     setLoading(false);
@@ -245,6 +287,7 @@ function AdminAgenda() {
     setLoading(false);
   };
 
+  // --- FUNÇÕES "NOVO SERVIÇO" ---
   const handleAdicionarExtraHoje = () => {
     setModalMode('new');
     setSelectedEvent({ start: new Date(), end: new Date() });
@@ -265,122 +308,6 @@ function AdminAgenda() {
     setModalIsOpen(true);
   };
 
-  // --- HANDLERS MODAL ---
-  const handleSelectSlot = (slotInfo) => {
-    setModalMode('new'); setSelectedEvent({ start: slotInfo.start, end: slotInfo.end });
-    setModalServicoId(''); setModalNome(''); setModalEmail(''); setModalTelefone(''); setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
-    setModalProfissionalId(profile?.role !== 'admin' ? profile?.id : (filtroProfissionalId || ''));
-    setModalIsOpen(true);
-  };
-
-  const handleSelectEvent = (eventInfo) => {
-    const ag = eventInfo.resource;
-    setModalMode('edit'); setSelectedEvent(ag);
-    setModalServicoId(ag.servico_id); setModalProfissionalId(ag.profissional_id); setModalNome(ag.nome_cliente); setModalEmail(ag.email_cliente || ''); setModalTelefone(ag.telefone_cliente || '');
-    setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setNovaData(new Date(ag.data_hora_inicio)); setShowCancelOptions(false); setAdminCancelReason(MOTIVOS_ADMIN[0]);
-    setModalIsOpen(true); 
-  };
-  
-  const closeModal = () => { setModalIsOpen(false); setSelectedEvent(null); setShowCancelOptions(false); };
-
-  // --- FUNÇÃO DE SALVAR BLINDADA ---
-  const handleModalSave = async () => {
-    // 1. Validação
-    if (!modalServicoId || !modalProfissionalId || !modalNome) { 
-        setModalError('Preencha serviço, profissional e nome.'); 
-        return; 
-    }
-
-    setIsSavingModal(true); // Trava o botão
-    setModalError(null);
-
-    try {
-        const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
-        let ini;
-        if (showRemarcar && novoHorarioSelecionado) ini = new Date(novoHorarioSelecionado);
-        else if (modalMode === 'new') {
-            ini = selectedEvent?.start ? new Date(selectedEvent.start) : new Date();
-        }
-        else ini = new Date(selectedEvent.data_hora_inicio);
-        
-        const fim = new Date(ini.getTime() + servico.duracao_minutos * 60000);
-        const payload = { servico_id: servico.id, profissional_id: parseInt(modalProfissionalId), nome_cliente: modalNome, email_cliente: modalEmail, telefone_cliente: modalTelefone, data_hora_inicio: ini.toISOString(), data_hora_fim: fim.toISOString(), status: 'confirmado' };
-
-        let errReq;
-        if (modalMode === 'new') { 
-            const { error } = await supabase.from('agendamentos').insert(payload); 
-            errReq = error; 
-        } else { 
-            const { error } = await supabase.from('agendamentos').update(payload).eq('id', selectedEvent.id); 
-            errReq = error; 
-        }
-
-        if (errReq) throw errReq;
-        
-        // Sucesso
-        closeModal(); 
-        fetchAgendamentos();
-
-    } catch (error) {
-        console.error("Erro ao salvar:", error);
-        setModalError(error.message || "Erro ao salvar. Verifique sua conexão.");
-    } finally {
-        // SEGURANÇA: Destrava o botão aconteça o que acontecer
-        setIsSavingModal(false);
-    }
-  };
-
-  const handleModalCancel = async () => {
-    if (profile.role !== 'admin' && profile.id !== selectedEvent.profissional_id) { setModalError('Sem permissão.'); return; }
-    if (!showCancelOptions) { setShowCancelOptions(true); return; }
-    
-    setIsSavingModal(true); 
-    try {
-        const { error } = await supabase.from('agendamentos').update({ status: 'cancelado', cancelamento_motivo: adminCancelReason }).eq('id', selectedEvent.id);
-        if (error) throw error;
-
-        const nome = selectedEvent.nome_cliente.split(' ')[0];
-        const servico = selectedEvent.servicos?.nome || 'serviço';
-        const msg = `Olá ${nome}. Infelizmente tivemos que cancelar seu agendamento de ${servico}. Motivo: ${adminCancelReason}`;
-        const link = `https://wa.me/55${selectedEvent.telefone_cliente.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`;
-        window.open(link, '_blank');
-        closeModal(); 
-        fetchAgendamentos();
-    } catch (error) {
-        setModalError(error.message);
-    } finally {
-        setIsSavingModal(false);
-    }
-  };
-
-  const buscarHorariosParaRemarcar = async (data) => {
-    setLoadingNovosHorarios(true); setNovosHorarios([]); setNovoHorarioSelecionado(null); setNovaData(data);
-    const profId = parseInt(modalProfissionalId); const servId = parseInt(modalServicoId);
-    if (!profId || !servId) { setModalError("Selecione serviço e profissional."); setLoadingNovosHorarios(false); return; }
-    
-    const servico = allServicos.find(s => s.id === servId);
-    const { data: trab } = await supabase.from('horarios_trabalho').select('hora_inicio, hora_fim').eq('dia_semana', data.getDay()).eq('profissional_id', profId).single();
-    if (!trab) { setLoadingNovosHorarios(false); return; }
-    
-    const dIni = new Date(data); dIni.setHours(0,0,0,0); const dFim = new Date(data); dFim.setHours(23,59,59);
-    const { data: ags } = await supabase.from('agendamentos').select('data_hora_inicio, data_hora_fim').gte('data_hora_inicio', dIni.toISOString()).lte('data_hora_fim', dFim.toISOString()).eq('profissional_id', profId).neq('status', 'cancelado').neq('id', selectedEvent?.id || 0);
-    
-    const slots = [];
-    const [hI, mI] = trab.hora_inicio.split(':'); const [hF, mF] = trab.hora_fim.split(':');
-    let curr = new Date(data); curr.setHours(hI, mI, 0, 0); const limit = new Date(data); limit.setHours(hF, mF, 0, 0);
-    
-    while (curr < limit) {
-      const slotEnd = new Date(curr.getTime() + servico.duracao_minutos * 60000);
-      if (slotEnd > limit) break;
-      if (curr > new Date()) {
-        if (!ags?.some(a => { const ai=new Date(a.data_hora_inicio), af=new Date(a.data_hora_fim); return (curr>=ai && curr<af) || (slotEnd>ai && slotEnd<=af); })) slots.push(new Date(curr));
-      }
-      curr = new Date(curr.getTime() + servico.duracao_minutos * 60000);
-    }
-    setNovosHorarios(slots); setLoadingNovosHorarios(false);
-  };
-
-  // --- FUNÇÃO RECUPERADA: RENDERIZAR LISTA DE HOJE ---
   const renderListaHoje = () => {
     const hojeStr = new Date().toLocaleDateString('pt-BR');
     const agendamentosHoje = agendamentosRawState.filter(ag => {
@@ -459,26 +386,21 @@ function AdminAgenda() {
                                     <button 
                                         onClick={() => handleAdicionarServicoParaCliente(ag)}
                                         className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-sm font-bold hover:bg-purple-200 transition"
-                                        title="Adicionar Serviço Extra para este cliente"
                                     >
                                         + Serviço
                                     </button>
-
                                     <button 
                                         onClick={() => handleEnviarWhatsApp(ag, 'contato')}
                                         className="p-2 bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition"
-                                        title="Chamar no WhatsApp"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                                     </button>
-                                    
                                     <button 
                                         onClick={() => handleSelectEvent({ resource: ag })}
                                         className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-200 transition"
                                     >
                                         Editar
                                     </button>
-
                                     <button 
                                         onClick={() => handleUpdateStatus(ag.id, 'finalizado')}
                                         className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition shadow-sm"
@@ -495,14 +417,111 @@ function AdminAgenda() {
     );
   };
 
+  // --- HANDLERS MODAL ---
+  const handleSelectSlot = (slotInfo) => {
+    setModalMode('new'); setSelectedEvent({ start: slotInfo.start, end: slotInfo.end });
+    setModalServicoId(''); setModalNome(''); setModalEmail(''); setModalTelefone(''); setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
+    setModalProfissionalId(profile?.role !== 'admin' ? profile?.id : (filtroProfissionalId || ''));
+    setModalIsOpen(true);
+  };
+
+  const handleSelectEvent = (eventInfo) => {
+    const ag = eventInfo.resource;
+    setModalMode('edit'); setSelectedEvent(ag);
+    setModalServicoId(ag.servico_id); setModalProfissionalId(ag.profissional_id); setModalNome(ag.nome_cliente); setModalEmail(ag.email_cliente || ''); setModalTelefone(ag.telefone_cliente || '');
+    setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setNovaData(new Date(ag.data_hora_inicio)); setShowCancelOptions(false); setAdminCancelReason(MOTIVOS_ADMIN[0]);
+    setModalIsOpen(true); 
+  };
+  
+  const closeModal = () => { setModalIsOpen(false); setSelectedEvent(null); setShowCancelOptions(false); };
+
+  const handleModalSave = async () => {
+    setIsSavingModal(true); setModalError(null);
+    try {
+      if (!modalServicoId || !modalProfissionalId || !modalNome) throw new Error('Preencha serviço, profissional e nome.');
+      
+      const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
+      let ini;
+      if (showRemarcar && novoHorarioSelecionado) ini = new Date(novoHorarioSelecionado);
+      else if (modalMode === 'new') ini = selectedEvent?.start ? new Date(selectedEvent.start) : new Date();
+      else ini = new Date(selectedEvent.data_hora_inicio);
+      
+      const fim = new Date(ini.getTime() + servico.duracao_minutos * 60000);
+      const payload = { servico_id: servico.id, profissional_id: parseInt(modalProfissionalId), nome_cliente: modalNome, email_cliente: modalEmail, telefone_cliente: modalTelefone, data_hora_inicio: ini.toISOString(), data_hora_fim: fim.toISOString(), status: 'confirmado' };
+
+      let errReq;
+      if (modalMode === 'new') { const { error } = await supabase.from('agendamentos').insert(payload); errReq = error; } 
+      else { const { error } = await supabase.from('agendamentos').update(payload).eq('id', selectedEvent.id); errReq = error; }
+
+      if (errReq) throw errReq;
+      closeModal(); fetchAgendamentos();
+    } catch (error) {
+      setModalError(error.message || "Erro ao salvar.");
+    } finally {
+      setIsSavingModal(false);
+    }
+  };
+
+  const handleModalCancel = async () => {
+    if (profile.role !== 'admin' && profile.id !== selectedEvent.profissional_id) { setModalError('Sem permissão.'); return; }
+    if (!showCancelOptions) { setShowCancelOptions(true); return; }
+    
+    setIsSavingModal(true); 
+    try {
+        const { error } = await supabase.from('agendamentos').update({ status: 'cancelado', cancelamento_motivo: adminCancelReason }).eq('id', selectedEvent.id);
+        if (error) throw error;
+        
+        // Abrir whatsapp
+        const nome = selectedEvent.nome_cliente.split(' ')[0];
+        const servico = selectedEvent.servicos?.nome || 'serviço';
+        const msg = `Olá ${nome}. Infelizmente tivemos que cancelar seu agendamento de ${servico}. Motivo: ${adminCancelReason}`;
+        const link = `https://wa.me/55${selectedEvent.telefone_cliente.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`;
+        window.open(link, '_blank');
+        
+        closeModal(); fetchAgendamentos();
+    } catch (error) {
+        setModalError(error.message);
+    } finally {
+        setIsSavingModal(false);
+    }
+  };
+
+  const buscarHorariosParaRemarcar = async (data) => {
+    setLoadingNovosHorarios(true); setNovosHorarios([]); setNovoHorarioSelecionado(null); setNovaData(data);
+    const profId = parseInt(modalProfissionalId); const servId = parseInt(modalServicoId);
+    if (!profId || !servId) { setModalError("Selecione serviço e profissional."); setLoadingNovosHorarios(false); return; }
+    
+    const servico = allServicos.find(s => s.id === servId);
+    const { data: trab } = await supabase.from('horarios_trabalho').select('hora_inicio, hora_fim').eq('dia_semana', data.getDay()).eq('profissional_id', profId).single();
+    if (!trab) { setLoadingNovosHorarios(false); return; }
+    
+    const dIni = new Date(data); dIni.setHours(0,0,0,0); const dFim = new Date(data); dFim.setHours(23,59,59);
+    const { data: ags } = await supabase.from('agendamentos').select('data_hora_inicio, data_hora_fim').gte('data_hora_inicio', dIni.toISOString()).lte('data_hora_fim', dFim.toISOString()).eq('profissional_id', profId).neq('status', 'cancelado').neq('id', selectedEvent?.id || 0);
+    
+    const slots = [];
+    const [hI, mI] = trab.hora_inicio.split(':'); const [hF, mF] = trab.hora_fim.split(':');
+    let curr = new Date(data); curr.setHours(hI, mI, 0, 0); const limit = new Date(data); limit.setHours(hF, mF, 0, 0);
+    
+    while (curr < limit) {
+      const slotEnd = new Date(curr.getTime() + servico.duracao_minutos * 60000);
+      if (slotEnd > limit) break;
+      if (curr > new Date()) {
+        if (!ags?.some(a => { const ai=new Date(a.data_hora_inicio), af=new Date(a.data_hora_fim); return (curr>=ai && curr<af) || (slotEnd>ai && slotEnd<=af); })) slots.push(new Date(curr));
+      }
+      curr = new Date(curr.getTime() + servico.duracao_minutos * 60000);
+    }
+    setNovosHorarios(slots); setLoadingNovosHorarios(false);
+  };
+
   const eventStyleGetter = (event, start, end, isSelected) => {
     return {
       style: {
-        backgroundColor: 'transparent',
+        backgroundColor: 'transparent', // Importante para usar nosso card customizado
         border: 'none',
-        padding: 0,
-        overflow: 'visible',
-        zIndex: 20
+        padding: '0px',
+        overflow: 'visible', // Para o tooltip sair da caixa
+        zIndex: isSelected ? 100 : 20,
+        height: '100%' // Ocupar todo espaço do slot
       }
     };
   };
@@ -623,12 +642,12 @@ function AdminAgenda() {
               components={{ event: EventoPersonalizado }}
               messages={messages}
               culture="pt-BR"
-              tooltipAccessor={null} 
+              tooltipAccessor={null} // Tooltip personalizado já está dentro do componente de evento
             />
         </div>
       )}
 
-      {/* MODAL (FORMULÁRIO DE EDIÇÃO/CRIAÇÃO) */}
+      {/* MODAL */}
       <Modal isOpen={modalIsOpen} onRequestClose={closeModal} className="Modal" overlayClassName="ModalOverlay">
         {selectedEvent && (
           <form onSubmit={(e) => { e.preventDefault(); handleModalSave(); }} className="flex flex-col h-full">
