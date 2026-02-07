@@ -1,338 +1,334 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { supabase } from '/src/supabaseClient.js';
 
-// NOVO: Array para os dias da semana
+// Dias da semana
 const DIAS_DA_SEMANA = [
   { numero: 0, nome: 'Domingo' },
-  { numero: 1, nome: 'Segunda-feira' },
-  { numero: 2, nome: 'Terça-feira' },
-  { numero: 3, nome: 'Quarta-feira' },
-  { numero: 4, nome: 'Quinta-feira' },
-  { numero: 5, nome: 'Sexta-feira' },
+  { numero: 1, nome: 'Segunda' },
+  { numero: 2, nome: 'Terça' },
+  { numero: 3, nome: 'Quarta' },
+  { numero: 4, nome: 'Quinta' },
+  { numero: 5, nome: 'Sexta' },
   { numero: 6, nome: 'Sábado' },
 ];
 
+// Ícones SVG para leveza
+const Icons = {
+  Check: () => <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>,
+  Clock: () => <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  Save: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+};
+
 function ProfissionalEditPage() {
-  const { id } = useParams(); // Pega o ID da profissional
+  const { id } = useParams();
   
-  // States da profissional e serviços (como antes)
   const [profissional, setProfissional] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
   const [todosServicos, setTodosServicos] = useState([]);
   const [servicosSelecionados, setServicosSelecionados] = useState(new Set());
-  const [loadingServicos, setLoadingServicos] = useState(true);
+  
+  // Estado otimizado para horários
+  const [horarios, setHorarios] = useState({}); 
+  const [savingDia, setSavingDia] = useState(null); // Para mostrar carregamento no botão específico
 
-  // NOVO: State para os horários de trabalho
-  const [horarios, setHorarios] = useState(null); // Vai guardar { 0: {id, ...}, 1: {id, ...}, ... }
-  const [loadingHorarios, setLoadingHorarios] = useState(true);
-
-  // useEffect para buscar TODOS os dados ao carregar
+  // --- CARREGAMENTO DE DADOS ---
   useEffect(() => {
     async function fetchDados() {
-      setLoading(true);
-      setLoadingServicos(true);
-      setLoadingHorarios(true); // NOVO
+      try {
+        setLoading(true);
 
-      // --- 1. Busca os dados da profissional (como antes) ---
-      const { data: profData, error: profError } = await supabase
-        .from('profissionais')
-        .select('*')
-        .eq('id', id)
-        .single();
+        // 1. Dados Profissional
+        const { data: profData, error: profError } = await supabase.from('profissionais').select('*').eq('id', id).single();
+        if (profError) throw profError;
+        setProfissional(profData);
 
-      if (profError) {
-        console.error('Erro ao buscar profissional:', profError);
-        setError('Não foi possível carregar os dados da profissional.');
-        setLoading(false);
-        setLoadingServicos(false);
-        setLoadingHorarios(false); // NOVO
-        return;
-      }
-      setProfissional(profData);
-      setLoading(false);
+        // 2. Todos os Serviços
+        const { data: servicosData } = await supabase.from('servicos').select('id, nome, duracao_minutos').order('nome');
+        setTodosServicos(servicosData || []);
 
-      // --- 2. Busca TODOS os serviços do salão (como antes) ---
-      const { data: todosServicosData, error: todosServicosError } = await supabase
-        .from('servicos')
-        .select('id, nome');
-      
-      if (todosServicosError) {
-        console.error('Erro ao buscar todos os serviços:', todosServicosError);
-        setError('Erro ao carregar lista de serviços.');
-        setLoadingServicos(false);
-        return;
-      }
-      setTodosServicos(todosServicosData);
+        // 3. Serviços Vinculados
+        const { data: vinculadosData } = await supabase.from('profissionais_servicos').select('servico_id').eq('profissional_id', id);
+        if (vinculadosData) {
+          setServicosSelecionados(new Set(vinculadosData.map(v => v.servico_id)));
+        }
 
-      // --- 3. Busca os serviços que ESTA profissional já faz (como antes) ---
-      const { data: servicosAtuaisData, error: servicosAtuaisError } = await supabase
-        .from('profissionais_servicos')
-        .select('servico_id')
-        .eq('profissional_id', id);
-
-      if (servicosAtuaisError) {
-        console.error('Erro ao buscar serviços da profissional:', servicosAtuaisError);
-      } else {
-        const idSet = new Set(servicosAtuaisData.map(item => item.servico_id));
-        setServicosSelecionados(idSet);
-      }
-      setLoadingServicos(false);
-
-      // --- 4. NOVO: Busca os horários de trabalho DESTA profissional ---
-      const { data: horariosData, error: horariosError } = await supabase
-        .from('horarios_trabalho')
-        .select('*')
-        .eq('profissional_id', id);
-      
-      if (horariosError) {
-        console.error('Erro ao buscar horários:', horariosError);
-        setError('Erro ao carregar horários de trabalho.');
-      } else {
-        // Converte o array de horários em um "mapa" (objeto)
-        // para ser fácil de acessar (ex: horariosMap[3] é Quarta)
-        const horariosMap = {};
+        // 4. Horários
+        const { data: horariosData } = await supabase.from('horarios_trabalho').select('*').eq('profissional_id', id);
+        
+        const mapaHorarios = {};
         DIAS_DA_SEMANA.forEach(dia => {
-          const horarioSalvo = horariosData.find(h => h.dia_semana === dia.numero);
-          if (horarioSalvo) {
-            // Se achou no banco, usa os dados
-            horariosMap[dia.numero] = {
-              id: horarioSalvo.id,
-              hora_inicio: horarioSalvo.hora_inicio,
-              hora_fim: horarioSalvo.hora_fim,
-              ativo: true
-            };
-          } else {
-            // Se não achou, usa valores padrão (inativo)
-            horariosMap[dia.numero] = {
-              id: null,
-              hora_inicio: '09:00:00',
-              hora_fim: '18:00:00',
-              ativo: false
-            };
-          }
+          const salvo = horariosData?.find(h => h.dia_semana === dia.numero);
+          mapaHorarios[dia.numero] = salvo ? {
+            id: salvo.id,
+            hora_inicio: salvo.hora_inicio,
+            hora_fim: salvo.hora_fim,
+            ativo: true
+          } : {
+            id: null,
+            hora_inicio: '09:00', // Padrão
+            hora_fim: '18:00',    // Padrão
+            ativo: false
+          };
         });
-        setHorarios(horariosMap);
+        setHorarios(mapaHorarios);
+
+      } catch (err) {
+        console.error("Erro ao carregar:", err);
+        setError("Erro ao carregar dados. Tente recarregar.");
+      } finally {
+        setLoading(false);
       }
-      setLoadingHorarios(false);
     }
-
     fetchDados();
-  }, [id]); // O [id] faz isso rodar sempre que o ID na URL mudar
+  }, [id]);
 
-  // Função para salvar serviços (como antes)
+  // --- LÓGICA DE SERVIÇOS (Toggle Imediato) ---
   const handleServicoToggle = async (servicoId) => {
-    const novosServicos = new Set(servicosSelecionados);
-    if (novosServicos.has(servicoId)) {
-      novosServicos.delete(servicoId);
-      const { error } = await supabase
-        .from('profissionais_servicos')
-        .delete()
-        .eq('profissional_id', id)
-        .eq('servico_id', servicoId);
-      if (error) alert('Erro ao remover serviço.');
-      else setServicosSelecionados(novosServicos);
-    } else {
-      novosServicos.add(servicoId);
-      const { error } = await supabase
-        .from('profissionais_servicos')
-        .insert({ profissional_id: id, servico_id: servicoId });
-      if (error) alert('Erro ao adicionar serviço.');
-      else setServicosSelecionados(novosServicos);
+    // Atualização Otimista (Visual muda na hora)
+    const anterior = new Set(servicosSelecionados);
+    const novoSet = new Set(servicosSelecionados);
+    
+    const isAdding = !novoSet.has(servicoId);
+    if (isAdding) novoSet.add(servicoId);
+    else novoSet.delete(servicoId);
+    
+    setServicosSelecionados(novoSet); // Atualiza tela
+
+    try {
+      if (isAdding) {
+        await supabase.from('profissionais_servicos').insert({ profissional_id: id, servico_id: servicoId });
+      } else {
+        await supabase.from('profissionais_servicos').delete().eq('profissional_id', id).eq('servico_id', servicoId);
+      }
+    } catch (err) {
+      console.error("Erro ao sincronizar serviço:", err);
+      setServicosSelecionados(anterior); // Reverte se der erro
+      alert("Erro ao atualizar serviço.");
     }
   };
 
-  // --- 5. NOVO: Funções para alterar os horários ---
-
-  // Altera qualquer campo (ativo, hora_inicio, hora_fim) de um dia
+  // --- LÓGICA DE HORÁRIOS ---
   const handleHorarioChange = (diaNum, campo, valor) => {
-    setHorarios(prevHorarios => ({
-      ...prevHorarios,
-      [diaNum]: {
-        ...prevHorarios[diaNum],
-        [campo]: valor
-      }
+    setHorarios(prev => ({
+      ...prev,
+      [diaNum]: { ...prev[diaNum], [campo]: valor }
     }));
   };
 
-  // Salva o horário de um dia específico no Supabase
   const handleHorarioSave = async (diaNum) => {
-    const horarioDoDia = horarios[diaNum];
-    
-    // Lógica:
-    // 1. Se "ativo" está MARCADO e ID NÃO EXISTE: INSERT
-    // 2. Se "ativo" está MARCADO e ID EXISTE: UPDATE
-    // 3. Se "ativo" está DESMARCADO e ID EXISTE: DELETE
-    // 4. Se "ativo" está DESMARCADO e ID NÃO EXISTE: Faz nada
+    setSavingDia(diaNum);
+    const h = horarios[diaNum];
 
     try {
-      if (horarioDoDia.ativo) {
-        // User quer salvar (INSERT ou UPDATE)
-        const dataToSave = {
+      if (h.ativo) {
+        // SALVAR/ATUALIZAR
+        const payload = {
           profissional_id: id,
           dia_semana: diaNum,
-          hora_inicio: horarioDoDia.hora_inicio,
-          hora_fim: horarioDoDia.hora_fim
+          hora_inicio: h.hora_inicio,
+          hora_fim: h.hora_fim
         };
 
-        if (horarioDoDia.id) {
-          // UPDATE (já existe no banco)
-          const { error } = await supabase.from('horarios_trabalho').update(dataToSave).eq('id', horarioDoDia.id);
-          if (error) throw error;
+        if (h.id) {
+          await supabase.from('horarios_trabalho').update(payload).eq('id', h.id);
         } else {
-          // INSERT (novo no banco)
-          const { data, error } = await supabase.from('horarios_trabalho').insert(dataToSave).select().single();
-          if (error) throw error;
-          // Salva o novo ID no estado
-          handleHorarioChange(diaNum, 'id', data.id);
+          const { data } = await supabase.from('horarios_trabalho').insert(payload).select().single();
+          if (data) handleHorarioChange(diaNum, 'id', data.id);
         }
-        alert(`Horário de ${DIAS_DA_SEMANA[diaNum].nome} salvo!`);
-
       } else {
-        // User quer desativar (DELETE)
-        if (horarioDoDia.id) {
-          // Só deleta se existir no banco
-          const { error } = await supabase.from('horarios_trabalho').delete().eq('id', horarioDoDia.id);
-          if (error) throw error;
-          // Limpa o ID do estado
+        // REMOVER (Se estiver desativado e existir ID)
+        if (h.id) {
+          await supabase.from('horarios_trabalho').delete().eq('id', h.id);
           handleHorarioChange(diaNum, 'id', null);
-          alert(`Horário de ${DIAS_DA_SEMANA[diaNum].nome} removido!`);
         }
-        // Se não tem ID e não está ativo, não faz nada.
       }
-    } catch (error) {
-      console.error('Erro ao salvar horário:', error);
-      alert(`Erro ao salvar: ${error.message}`);
+      // Pequeno delay visual para feedback de sucesso
+      setTimeout(() => setSavingDia(null), 500); 
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar horário.");
+      setSavingDia(null);
     }
   };
 
-  // --- Renderização ---
-  if (loading || !profissional) {
-    return <div className="max-w-4xl mx-auto"><p>Carregando...</p></div>;
-  }
-  if (error) {
-    return <div className="max-w-4xl mx-auto"><p className="text-red-600">{error}</p></div>;
-  }
+  if (loading) return <div className="p-10 text-center animate-pulse text-fuchsia-600 font-bold">Carregando perfil...</div>;
+  if (error) return <div className="p-10 text-center text-red-500">{error}</div>;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto pb-20 animate-fade-in font-sans">
       
-      {/* Link para Voltar */}
-      <Link 
-        to="/admin/profissionais"
-        className="text-blue-600 hover:underline"
-      >
-        &larr; Voltar para a lista de profissionais
-      </Link>
-
-      {/* Título Principal (com o nome real) */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">
-          Editar Profissional
-        </h1>
-        <p className="text-2xl font-semibold">{profissional.nome}</p>
-        <p className="text-gray-600">{profissional.email}</p>
-      </div>
-      
-      {/* Seção de Serviços (Como antes) */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-2xl font-semibold mb-4">Gerenciar Serviços</h2>
-        {loadingServicos ? ( <p>Carregando serviços...</p> ) : (
-          <div className="space-y-3">
-            {todosServicos.map((servico) => (
-              <label key={servico.id} className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={servicosSelecionados.has(servico.id)}
-                  onChange={() => handleServicoToggle(servico.id)}
-                />
-                <span className="ml-3 text-lg text-gray-700">{servico.nome}</span>
-              </label>
-            ))}
+      {/* --- HEADER MODERNO --- */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div className="flex items-center gap-4">
+          <Link to="/admin/profissionais" className="bg-white p-2 rounded-full shadow-sm hover:shadow-md text-gray-500 hover:text-fuchsia-600 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Editar Perfil</h1>
+            <p className="text-sm text-gray-500">Gerencie serviços e disponibilidade.</p>
           </div>
-        )}
-      </div>
-      
-      {/* NOVO: Seção de Horários (Agora é real) */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-2xl font-semibold mb-4">Gerenciar Horários de Trabalho</h2>
+        </div>
         
-        {loadingHorarios || !horarios ? (
-          <p>Carregando horários...</p>
-        ) : (
-          <div className="space-y-6">
-            {/* Mapeia os 7 dias da semana */}
-            {DIAS_DA_SEMANA.map(dia => {
-              const diaNum = dia.numero;
-              const horarioDoDia = horarios[diaNum];
+        {/* Card do Profissional */}
+        <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-fuchsia-100">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-fuchsia-600 to-purple-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
+            {profissional.nome.charAt(0)}
+          </div>
+          <div>
+            <p className="font-bold text-gray-800 leading-tight">{profissional.nome}</p>
+            <p className="text-xs text-gray-500">{profissional.email}</p>
+          </div>
+        </div>
+      </div>
 
-              return (
-                <div key={diaNum} className="p-4 border rounded-lg">
-                  {/* Checkbox para Ativar/Desativar o dia */}
-                  <label className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-gray-700">{dia.nome}</span>
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 rounded text-blue-600 focus:ring-blue-500"
-                      checked={horarioDoDia.ativo}
-                      onChange={(e) => handleHorarioChange(diaNum, 'ativo', e.target.checked)}
-                    />
-                  </label>
+      {/* --- GRID LAYOUT PRINCIPAL --- */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        
+        {/* COLUNA 1: SERVIÇOS (ESQUERDA) */}
+        <div className="xl:col-span-1 space-y-6">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <h2 className="text-xl font-bold text-gray-800 mb-1">Quais serviços atende?</h2>
+            <p className="text-xs text-gray-400 mb-6">Clique para ativar ou desativar.</p>
+            
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              {todosServicos.map(serv => {
+                const isSelected = servicosSelecionados.has(serv.id);
+                return (
+                  <div 
+                    key={serv.id} 
+                    onClick={() => handleServicoToggle(serv.id)}
+                    className={`
+                      cursor-pointer group flex items-center justify-between p-3 rounded-xl border transition-all duration-200
+                      ${isSelected 
+                        ? 'bg-fuchsia-50 border-fuchsia-200 shadow-inner' 
+                        : 'bg-white border-gray-100 hover:border-fuchsia-200 hover:shadow-sm'}
+                    `}
+                  >
+                    <div>
+                      <p className={`font-bold text-sm ${isSelected ? 'text-fuchsia-800' : 'text-gray-600'}`}>{serv.nome}</p>
+                      <p className="text-xs text-gray-400">{serv.duracao_minutos} min</p>
+                    </div>
+                    
+                    {/* Checkbox Visual Moderno */}
+                    <div className={`
+                      w-6 h-6 rounded-full flex items-center justify-center transition-all
+                      ${isSelected ? 'bg-fuchsia-500 scale-110' : 'bg-gray-200 group-hover:bg-gray-300'}
+                    `}>
+                      {isSelected && <Icons.Check />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
-                  {/* Inputs de Hora (só aparecem se o dia está ativo) */}
-                  {horarioDoDia.ativo && (
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600">Início</label>
+        {/* COLUNA 2: HORÁRIOS (DIREITA - LARGA) */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <h2 className="text-xl font-bold text-gray-800 mb-1">Grade de Horários</h2>
+            <p className="text-xs text-gray-400 mb-6">Defina os dias e intervalos de atendimento.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {DIAS_DA_SEMANA.map(dia => {
+                const diaNum = dia.numero;
+                const h = horarios[diaNum] || {};
+                const isAtivo = h.ativo;
+
+                return (
+                  <div 
+                    key={diaNum} 
+                    className={`
+                      relative p-4 rounded-2xl border transition-all duration-300
+                      ${isAtivo 
+                        ? 'bg-white border-fuchsia-200 shadow-md ring-1 ring-fuchsia-100' 
+                        : 'bg-gray-50 border-gray-200 opacity-70 grayscale'}
+                    `}
+                  >
+                    {/* Header do Card */}
+                    <div className="flex justify-between items-center mb-4">
+                      <span className={`font-bold uppercase tracking-wider text-xs ${isAtivo ? 'text-fuchsia-700' : 'text-gray-500'}`}>
+                        {dia.nome}
+                      </span>
+                      
+                      {/* Toggle Switch */}
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={isAtivo}
+                          onChange={(e) => {
+                            handleHorarioChange(diaNum, 'ativo', e.target.checked);
+                            // Auto-save ao ligar/desligar? Opcional. 
+                            // O usuário pediu botão salvar, então vamos manter manual para segurança.
+                          }}
+                        />
+                        <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-fuchsia-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Inputs de Horário */}
+                    <div className={`space-y-3 transition-opacity duration-300 ${!isAtivo ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+                      <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <span className="text-xs font-bold text-gray-400 w-10">INÍCIO</span>
                         <input
                           type="time"
-                          value={horarioDoDia.hora_inicio}
+                          min="07:00"
+                          max="20:30"
+                          value={h.hora_inicio}
                           onChange={(e) => handleHorarioChange(diaNum, 'hora_inicio', e.target.value)}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2"
+                          className="bg-transparent text-sm font-bold text-gray-700 outline-none w-full"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600">Fim</label>
+                      <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <span className="text-xs font-bold text-gray-400 w-10">FIM</span>
                         <input
                           type="time"
-                          value={horarioDoDia.hora_fim}
+                          min="07:00"
+                          max="20:30"
+                          value={h.hora_fim}
                           onChange={(e) => handleHorarioChange(diaNum, 'hora_fim', e.target.value)}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2"
+                          className="bg-transparent text-sm font-bold text-gray-700 outline-none w-full"
                         />
                       </div>
                     </div>
-                  )}
-                  
-                  {/* Botão Salvar (só aparece se o dia está ativo) */}
-                  {horarioDoDia.ativo && (
-                    <button
-                      onClick={() => handleHorarioSave(diaNum)}
-                      className="mt-4 w-full p-2 rounded-lg text-white font-semibold bg-green-600 hover:bg-green-700"
-                    >
-                      Salvar {dia.nome}
-                    </button>
-                  )}
-                  
-                  {/* Botão Remover (só aparece se o dia está inativo mas AINDA EXISTE no banco) */}
-                  {!horarioDoDia.ativo && horarioDoDia.id && (
-                     <button
-                      onClick={() => handleHorarioSave(diaNum)} // A mesma função (ela trata a remoção)
-                      className="mt-4 w-full p-2 rounded-lg text-white font-semibold bg-red-600 hover:bg-red-700"
-                    >
-                      Remover {dia.nome} (Salvar)
-                    </button>
-                  )}
 
-                </div>
-              );
-            })}
+                    {/* Botão de Ação do Card */}
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+                      <button
+                        onClick={() => handleHorarioSave(diaNum)}
+                        disabled={savingDia === diaNum}
+                        className={`
+                          flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all
+                          ${savingDia === diaNum 
+                            ? 'bg-gray-200 text-gray-500 cursor-wait'
+                            : isAtivo 
+                              ? 'bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200' 
+                              : 'bg-white text-gray-400 hover:text-gray-600 border border-gray-200'}
+                        `}
+                      >
+                        {savingDia === diaNum ? (
+                          <span>Salvando...</span>
+                        ) : (
+                          <>
+                            <Icons.Save />
+                            {isAtivo ? 'Atualizar' : 'Confirmar Fechamento'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
 
+      </div>
     </div>
   );
 }
