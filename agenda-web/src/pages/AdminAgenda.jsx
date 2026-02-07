@@ -193,11 +193,23 @@ function AdminAgenda() {
   // =========================================================
   async function fetchModalData() {
     try {
-        const { data: servicosData } = await supabase.from('servicos').select('id, nome, duracao_minutos').eq('ativo', true);
+        // AJUSTE SOLICITADO: Removido .eq('ativo', true) para garantir que traga todos
+        // e adicionado .order('nome') para organizar a lista
+        const { data: servicosData } = await supabase
+            .from('servicos')
+            .select('id, nome, duracao_minutos')
+            .order('nome', { ascending: true });
+            
         if (servicosData) setAllServicos(servicosData);
         
-        const { data: profData } = await supabase.from('profissionais').select('id, nome').eq('ativo', true);
+        // AJUSTE SOLICITADO: Correção para lista de profissionais
+        const { data: profData } = await supabase
+            .from('profissionais')
+            .select('id, nome')
+            .order('nome', { ascending: true });
+            
         if (profData) setAllProfissionais(profData);
+        
     } catch (e) {
         console.error("Erro ao buscar dados auxiliares", e);
     }
