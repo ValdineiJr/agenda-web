@@ -6,11 +6,11 @@ function ProtectedRoute() {
   const { session, profile, loading } = useAuth(); 
   const [demorou, setDemorou] = useState(false);
 
-  // Timer de segurança
+  // Timer de segurança: Se carregar demorar muito, oferece opção de limpar
   useEffect(() => {
     let timer;
     if (loading) {
-      timer = setTimeout(() => setDemorou(true), 3000); // 3 segundos
+      timer = setTimeout(() => setDemorou(true), 4000); // 4 segundos
     }
     return () => clearTimeout(timer);
   }, [loading]);
@@ -25,16 +25,13 @@ function ProtectedRoute() {
     return (
       <div className="flex flex-col h-screen items-center justify-center bg-gray-50 text-gray-600 gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-fuchsia-600"></div>
-        <p>Carregando sistema...</p>
+        <p>Verificando acesso...</p>
         
         {demorou && (
           <div className="text-center animate-fade-in">
-            <p className="text-sm text-gray-500 mb-2">Está demorando muito?</p>
-            <button 
-              onClick={forcarReinico}
-              className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors shadow-sm"
-            >
-              Clique aqui para Limpar e Reiniciar
+            <p className="text-sm text-gray-500 mb-2">Está demorando?</p>
+            <button onClick={forcarReinico} className="text-sm font-bold text-red-600 bg-red-100 px-4 py-2 rounded hover:bg-red-200 transition-colors shadow-sm">
+              Limpar e Reiniciar
             </button>
           </div>
         )}
@@ -42,19 +39,20 @@ function ProtectedRoute() {
     ); 
   }
 
-  // --- CORREÇÃO DA TELA BRANCA ---
-  // Se não tem sessão, vai pro login.
+  // 1. Se não tem sessão, login.
   if (!session) {
     return <Navigate to="/login" replace />;
   }
 
-  // NOVA TRAVA DE SEGURANÇA:
-  // Se tem sessão, mas o perfil falhou em carregar (é null), 
-  // não podemos deixar carregar o Layout, senão da TELA BRANCA.
-  // Mandamos volta para o login para tentar buscar o perfil de novo.
+  // 2. Se tem sessão mas o perfil não carregou (erro de banco), 
+  // tenta recarregar a página uma vez ou manda pro login pra forçar refresh
   if (!profile) {
-    console.warn("Sessão ativa mas perfil não encontrado. Redirecionando...");
-    return <Navigate to="/login" replace />;
+    return (
+        <div className="flex flex-col h-screen items-center justify-center bg-gray-50">
+            <p className="text-gray-600 mb-4">Perfil não identificado.</p>
+            <button onClick={forcarReinico} className="text-fuchsia-600 font-bold underline">Tentar novamente</button>
+        </div>
+    );
   }
 
   return <Outlet />;
