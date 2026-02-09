@@ -10,20 +10,22 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Tempo aumentado para manter a sessão (4 horas)
-  const TEMPO_INATIVIDADE = 4 * 60 * 60 * 1000; 
+  // --- 1. CONFIGURAÇÃO DE TEMPO (AUMENTADO PARA 12 HORAS) ---
+  // Isso evita que a recepção seja deslogada durante todo o dia de trabalho
+  const TEMPO_INATIVIDADE = 12 * 60 * 60 * 1000; 
+
   const lastCheckTime = useRef(0);
 
+  // --- 2. FUNÇÃO DE LIMPEZA TOTAL (Logout Forçado) ---
   const realizarLimpezaTotal = async () => {
-    console.warn("Limpando sessão e reiniciando...");
+    console.warn("Sessão expirada ou inválida: Renovando sistema...");
     try {
         await supabase.auth.signOut();
     } catch (e) {
-        console.error("Erro logout silencioso:", e);
+        console.error("Erro ao deslogar (ignorado):", e);
     }
     localStorage.clear();
     sessionStorage.clear();
-    // Força recarregamento limpo do servidor
     window.location.href = '/login'; 
   };
 
@@ -36,19 +38,19 @@ export const AuthProvider = ({ children }) => {
         .single();
       
       if (error) {
-        // Fallback de segurança para não travar se a tabela falhar
+        // Fallback de segurança: Se o perfil falhar, tenta reconstruir um básico se for admin conhecido
         const emailsAdmin = ['valdinei@seuemail.com', user.email]; 
         if (emailsAdmin.includes(user.email)) {
              setProfile({ id: user.id, role: 'admin', nome: user.email.split('@')[0], avatar: null });
         } else {
-             setProfile(null);
+             // Se não achou perfil e não é admin conhecido, pode ser um erro de conexão momentâneo
+             console.error("Perfil não encontrado no banco.");
         }
       } else {
         setProfile(data);
       }
     } catch (error) {
-      console.error('Erro crítico perfil:', error);
-      setProfile({ role: 'admin', nome: 'Admin Recuperado' });
+      console.error('Erro crítico ao buscar perfil:', error);
     }
   };
 
@@ -57,7 +59,7 @@ export const AuthProvider = ({ children }) => {
     let inatividadeTimer;
     let keepAliveInterval;
 
-    // --- 1. MONITOR DE INATIVIDADE ---
+    // --- 3. MONITOR DE INATIVIDADE ---
     const resetarTimerInatividade = () => {
         if (!mounted) return;
         if (inatividadeTimer) clearTimeout(inatividadeTimer);
@@ -66,16 +68,17 @@ export const AuthProvider = ({ children }) => {
         }, TEMPO_INATIVIDADE);
     };
 
-    // --- 2. SISTEMA KEEP-ALIVE (Evita queda de conexão) ---
+    // --- 4. SISTEMA KEEP-ALIVE (Mantém a conexão ativa) ---
     const startKeepAlive = () => {
         keepAliveInterval = setInterval(async () => {
             if (!mounted) return;
             const { data, error } = await supabase.auth.getSession();
-            // Se a sessão ainda existe, renova o estado local silenciosamente
-            if (!error && data.session && JSON.stringify(session) !== JSON.stringify(data.session)) {
+            
+            // Se a sessão existe no Supabase mas caiu no estado local, restaura
+            if (!error && data.session && !session) {
                 setSession(data.session);
             }
-        }, 1000 * 60 * 4); // Executa a cada 4 minutos
+        }, 1000 * 60 * 5); // Verifica a cada 5 minutos
     };
 
     const eventosAtivos = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
@@ -83,39 +86,29 @@ export const AuthProvider = ({ children }) => {
     resetarTimerInatividade();
     startKeepAlive();
 
-    // --- 3. INICIALIZAÇÃO BLINDADA (CORREÇÃO TELA BRANCA) ---
+    // --- 5. INICIALIZAÇÃO BLINDADA (CORREÇÃO DO TRAVAMENTO) ---
     const initializeAuth = async () => {
-      // Se o banco não responder em 7 segundos, libera o app para evitar travamento
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout de conexão")), 7000)
-      );
-
       try {
-        const sessionPromise = supabase.auth.getSession();
+        // Removemos o "race" com timeout curto que causava o travamento.
+        // Agora esperamos o Supabase responder, mesmo que demore um pouco.
+        const { data, error } = await supabase.auth.getSession();
         
-        // Corrida: Quem chegar primeiro ganha (Sessão ou Erro de Tempo)
-        const { data: { session: currentSession }, error } = await Promise.race([
-            sessionPromise,
-            timeoutPromise
-        ]).catch(err => {
-            console.warn("Demora na conexão detectada:", err);
-            return { data: { session: null }, error: null }; // Assume deslogado se der timeout
-        });
-        
+        if (error) {
+            // Se der erro de refresh token, aí sim limpamos
+            if (error.message.includes('refresh_token_not_found') || error.status === 400) {
+                realizarLimpezaTotal();
+                return;
+            }
+        }
+
         if (mounted) {
-          if (error) throw error;
-          setSession(currentSession);
-          
-          if (currentSession?.user) {
-            await fetchProfile(currentSession.user);
+          if (data.session) {
+            setSession(data.session);
+            await fetchProfile(data.session.user);
           }
         }
       } catch (error) {
-        console.error("Erro inicialização:", error);
-        // Se for erro de token inválido, limpa tudo para o usuário logar de novo
-        if (error.message && (error.message.includes('refresh_token_not_found') || error.status === 400)) {
-           realizarLimpezaTotal();
-        }
+        console.error("Erro na inicialização da auth:", error);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -123,43 +116,33 @@ export const AuthProvider = ({ children }) => {
 
     initializeAuth();
 
-    // --- 4. LISTENER DE MUDANÇAS ---
+    // --- 6. LISTENER DE MUDANÇAS ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
+      
       if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
          setSession(null);
          setProfile(null);
          setLoading(false);
          return; 
       }
+      
+      // Atualiza sessão se mudou
       if (newSession?.access_token !== session?.access_token) {
           setSession(newSession);
       }
+      
+      // Se temos usuário mas não perfil, busca o perfil
       if (newSession?.user && !profile) {
         await fetchProfile(newSession.user);
       }
+      
       setLoading(false);
     });
-
-    // --- 5. RECUPERAÇÃO DE FOCO (Para quem usa celular e volta pro app) ---
-    const handleFocus = async () => {
-      const now = Date.now();
-      if (now - lastCheckTime.current < 30000) return; // Não executa se tiver executado há menos de 30s
-      lastCheckTime.current = now;
-
-      const { data: { session: focusSession }, error } = await supabase.auth.getSession();
-      if (!error && focusSession && session?.access_token !== focusSession.access_token) {
-          console.log("Sessão recuperada ao focar.");
-          setSession(focusSession);
-      }
-    };
-    
-    window.addEventListener('focus', handleFocus);
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
-      window.removeEventListener('focus', handleFocus);
       eventosAtivos.forEach(evt => window.removeEventListener(evt, resetarTimerInatividade));
       if (inatividadeTimer) clearTimeout(inatividadeTimer);
       if (keepAliveInterval) clearInterval(keepAliveInterval);
@@ -183,9 +166,10 @@ export const AuthProvider = ({ children }) => {
       {!loading ? children : (
         <div className="flex h-screen items-center justify-center bg-gray-50">
            <div className="flex flex-col items-center gap-4">
+             {/* Spinner Visual */}
              <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-fuchsia-600"></div>
              <p className="text-gray-500 font-semibold animate-pulse">
-               Conectando ao sistema...
+               Aguarde por favor, Conectando ao sistema...
              </p>
            </div>
         </div>
