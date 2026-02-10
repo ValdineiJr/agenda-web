@@ -54,6 +54,13 @@ function formatarHora(dataISO) {
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(dataISO));
 }
 
+function getMesAno(dataString) {
+  // Recebe dd/mm/yyyy e retorna "Fevereiro 2026"
+  const [dia, mes, ano] = dataString.split('/');
+  const data = new Date(`${ano}-${mes}-${dia}T12:00:00`);
+  return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(data);
+}
+
 // =========================================================
 //    COMPONENTE DE EVENTO (VISUAL DO CALENDÁRIO)
 // =========================================================
@@ -87,28 +94,12 @@ const EventoCalendario = ({ event }) => {
              {format(event.start, 'HH:mm')}
            </span>
         </div>
-        
         <div className="font-extrabold text-[11px] truncate uppercase tracking-tight">
           {event.resource.nome_cliente}
         </div>
         <div className="text-[10px] truncate opacity-90 font-medium">
           {event.resource.servicos?.nome}
         </div>
-      </div>
-      
-      {/* Tooltip Hover */}
-      <div className="hidden md:group-hover:block absolute left-1/2 -translate-x-1/2 top-full mt-2 z-[9999] w-72 bg-white p-0 rounded-xl shadow-2xl border border-gray-200 pointer-events-none ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150 origin-top">
-         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white transform rotate-45 border-l border-t border-gray-200"></div>
-         <div className="bg-gradient-to-r from-gray-50 to-white p-3 border-b border-gray-100 rounded-t-xl">
-            <p className="font-black text-gray-800 text-sm uppercase">{event.resource.nome_cliente}</p>
-            <p className="text-xs text-gray-500 flex items-center gap-1">📱 {event.resource.telefone_cliente || 'Sem telefone'}</p>
-         </div>
-         <div className="p-3 space-y-2 text-xs text-gray-600">
-            <div className="flex justify-between"><span className="font-bold text-gray-400">SERVIÇO:</span><span className="font-bold text-fuchsia-700">{event.resource.servicos?.nome}</span></div>
-            <div className="flex justify-between"><span className="font-bold text-gray-400">PROFISSIONAL:</span><span>{event.resource.profissionais?.nome}</span></div>
-            <div className="flex justify-between"><span className="font-bold text-gray-400">HORÁRIO:</span><span className="bg-slate-100 px-1 rounded font-mono">{format(event.start, 'HH:mm')} - {format(event.end, 'HH:mm')}</span></div>
-            {isEmAtendimento && <div className="text-center bg-amber-100 text-amber-800 font-bold py-1 rounded mt-2">EM ATENDIMENTO</div>}
-         </div>
       </div>
     </div>
   );
@@ -123,6 +114,7 @@ function AdminAgenda() {
   // --- STATES DE DADOS ---
   const [agendamentosRawState, setAgendamentosRawState] = useState([]); 
   const [agendamentosAgrupados, setAgendamentosAgrupados] = useState({});
+  const [concluidosAgrupados, setConcluidosAgrupados] = useState({}); // NOVO: Separado por mês
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [proximosAgendamentos, setProximosAgendamentos] = useState([]);
 
@@ -133,6 +125,7 @@ function AdminAgenda() {
   const [selectedBulkIds, setSelectedBulkIds] = useState([]); 
   const [calendarView, setCalendarView] = useState('week');
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [showConcluidos, setShowConcluidos] = useState(false); // Toggle para ver histórico
 
   // --- DADOS AUXILIARES ---
   const [allServicos, setAllServicos] = useState([]);
@@ -208,31 +201,51 @@ function AdminAgenda() {
       setAgendamentosRawState(raw);
       
       let filtrados = filtroProfissionalId ? raw.filter(ag => ag.profissional_id == filtroProfissionalId) : raw;
-      const ativos = filtrados.filter(ag => ag.status !== 'cancelado');
+      
+      // SEPARAÇÃO: Ativos (Confirmado/Em Atendimento) vs Concluídos
+      const ativos = filtrados.filter(ag => ag.status === 'confirmado' || ag.status === 'em_atendimento');
+      const concluidos = filtrados.filter(ag => ag.status === 'finalizado');
       
       const agora = new Date(); agora.setHours(0,0,0,0);
       const limite = new Date(agora); limite.setDate(limite.getDate() + 2);
       
+      // Avisos
       setProximosAgendamentos(ativos.filter(ag => {
          const d = new Date(ag.data_hora_inicio); 
-         return d >= agora && d < limite && (ag.status === 'confirmado' || ag.status === 'em_atendimento');
+         return d >= agora && d < limite;
       }));
       
+      // Agrupamento dos ATIVOS por Dia
       const agrupar = (lista) => lista.reduce((acc, ag) => {
           const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
           if (!acc[d]) acc[d] = []; acc[d].push(ag); return acc;
       }, {});
       setAgendamentosAgrupados(agrupar(ativos));
 
-      setEventosCalendario(ativos.map(ag => ({
+      // Agrupamento dos CONCLUÍDOS por Mês/Ano
+      const agruparConcluidos = (lista) => lista.reduce((acc, ag) => {
+          const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
+          const mesAno = getMesAno(d); // "Fevereiro 2026"
+          
+          if (!acc[mesAno]) acc[mesAno] = {};
+          if (!acc[mesAno][d]) acc[mesAno][d] = [];
+          
+          acc[mesAno][d].push(ag);
+          return acc;
+      }, {});
+      setConcluidosAgrupados(agruparConcluidos);
+
+      // Calendário mostra TUDO (incluindo finalizados para histórico visual)
+      const eventos = filtrados.filter(ag => ag.status !== 'cancelado').map(ag => ({
         id: ag.id, title: ag.nome_cliente, start: new Date(ag.data_hora_inicio), end: new Date(ag.data_hora_fim), resource: ag, 
-      })));
+      }));
+      setEventosCalendario(eventos);
     }
     setLoading(false);
   }
 
   // =========================================================
-  //            AÇÕES: WHATSAPP (RESTORED)
+  //            AÇÕES: WHATSAPP
   // =========================================================
   const handleEnviarWhatsApp = (agendamento, tipo) => {
     const telefone = agendamento.telefone_cliente?.replace(/[^0-9]/g, '');
@@ -243,11 +256,12 @@ function AdminAgenda() {
     const horaF = formatarHora(agendamento.data_hora_inicio);
     const servico = agendamento.servicos?.nome || 'Serviço';
     
+    // MENSAGEM EXATA SOLICITADA
     let msg = "";
     if (tipo === 'confirmacao') {
         msg = `Olá ${nome}, tudo bem? Passando para confirmar seu horário de *${servico}* para o dia *${dataF} às ${horaF}*. Podemos confirmar?`;
     } else if (tipo === 'lembrete') {
-        msg = `Olá ${nome}! Passando para lembrar do seu horário de *${servico}* amanhã, dia *${dataF} às ${horaF}*. Te aguardamos!`;
+        msg = `Olá ${nome}, tudo bem? Passando para lembrar do seu horário de *${servico}* para o dia *${dataF} às ${horaF}*.`;
     } else if (tipo === 'cancelamento') {
          msg = `Olá ${nome}. Infelizmente precisamos cancelar/remarcar seu horário de *${servico}* no dia ${dataF}. Motivo: ${adminCancelReason}. Entre em contato para reagendar.`;
     } else {
@@ -263,11 +277,7 @@ function AdminAgenda() {
   };
 
   const toggleBulkSelect = (id) => setSelectedBulkIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  
-  const toggleSelectAllHoje = (listaDeHoje) => {
-    if (selectedBulkIds.length === listaDeHoje.length) setSelectedBulkIds([]); 
-    else setSelectedBulkIds(listaDeHoje.map(ag => ag.id));
-  };
+  const toggleSelectAllHoje = (lista) => setSelectedBulkIds(selectedBulkIds.length === lista.length ? [] : lista.map(ag => ag.id));
 
   const handleBulkFinish = async () => {
     if (selectedBulkIds.length === 0) return alert("Selecione pelo menos um agendamento.");
@@ -277,6 +287,7 @@ function AdminAgenda() {
     setSelectedBulkIds([]); fetchAgendamentos(); setLoading(false);
   };
 
+  // --- AUTOCOMPLETE + CADASTRO AUTOMÁTICO NA BUSCA ---
   const handleNomeChange = (e) => {
     const valor = e.target.value;
     setModalNome(valor);
@@ -306,10 +317,8 @@ function AdminAgenda() {
     setModalIsOpen(true);
   };
 
-  // --- MODAL HANDLERS ---
   const handleSelectSlot = (slotInfo) => {
-    setModalMode('new'); 
-    setSelectedEvent({ start: slotInfo.start, end: slotInfo.end });
+    setModalMode('new'); setSelectedEvent({ start: slotInfo.start, end: slotInfo.end });
     setModalServicoId(''); setModalNome(''); setModalTelefone(''); setModalEmail(''); setModalError(null); 
     setModalProfissionalId(profile?.role !== 'admin' ? profile?.id : (filtroProfissionalId || ''));
     setShowRemarcar(false); setNovoHorarioSelecionado(null); setShowCancelOptions(false);
@@ -318,19 +327,11 @@ function AdminAgenda() {
 
   const handleSelectEvent = (eventInfo) => {
     const ag = eventInfo.resource || eventInfo; 
-    setModalMode('edit'); 
-    setSelectedEvent(ag);
-    setModalServicoId(ag.servico_id); 
-    setModalProfissionalId(ag.profissional_id); 
-    setModalNome(ag.nome_cliente); 
-    setModalTelefone(ag.telefone_cliente || '');
-    setModalEmail(ag.email_cliente || '');
-    setModalError(null); 
-    setShowRemarcar(false); 
-    setNovoHorarioSelecionado(null); 
-    setNovaData(new Date(ag.data_hora_inicio)); 
-    setShowCancelOptions(false);
-    setAdminCancelReason(MOTIVOS_ADMIN[0]);
+    setModalMode('edit'); setSelectedEvent(ag);
+    setModalServicoId(ag.servico_id); setModalProfissionalId(ag.profissional_id); 
+    setModalNome(ag.nome_cliente); setModalTelefone(ag.telefone_cliente || ''); setModalEmail(ag.email_cliente || '');
+    setModalError(null); setShowRemarcar(false); setNovoHorarioSelecionado(null); setNovaData(new Date(ag.data_hora_inicio)); 
+    setShowCancelOptions(false); setAdminCancelReason(MOTIVOS_ADMIN[0]);
     setModalIsOpen(true); 
   };
   
@@ -347,17 +348,17 @@ function AdminAgenda() {
     
     const diaInicio = new Date(data); diaInicio.setHours(0,0,0,0);
     const diaFim = new Date(data); diaFim.setHours(23,59,59,999);
-    const { data: agendamentosDoDia } = await supabase.from('agendamentos').select('data_hora_inicio, data_hora_fim').eq('profissional_id', profId).neq('status', 'cancelado').neq('id', selectedEvent?.id || 0).gte('data_hora_inicio', diaInicio.toISOString()).lte('data_hora_fim', diaFim.toISOString());
+    const { data: ags } = await supabase.from('agendamentos').select('data_hora_inicio, data_hora_fim').eq('profissional_id', profId).neq('status', 'cancelado').neq('id', selectedEvent?.id || 0).gte('data_hora_inicio', diaInicio.toISOString()).lte('data_hora_fim', diaFim.toISOString());
 
     const slots = [];
     const [hIni, mIni] = turno.hora_inicio.split(':'); const [hF, mF] = turno.hora_fim.split(':');
     let cursor = new Date(data); cursor.setHours(parseInt(hIni), parseInt(mIni), 0, 0);
-    const limite = new Date(data); limite.setHours(parseInt(hFim), parseInt(mFim), 0, 0);
+    const limite = new Date(data); limite.setHours(parseInt(hF), parseInt(mF), 0, 0);
     
     while (cursor < limite) {
         const slotFim = new Date(cursor.getTime() + servico.duracao_minutos * 60000);
         if (slotFim > limite) break; 
-        const temConflito = agendamentosDoDia?.some(ag => (cursor < new Date(ag.data_hora_fim) && slotFim > new Date(ag.data_hora_inicio)));
+        const temConflito = ags?.some(ag => (cursor < new Date(ag.data_hora_fim) && slotFim > new Date(ag.data_hora_inicio)));
         if (!temConflito && cursor > new Date()) slots.push(new Date(cursor));
         cursor = new Date(cursor.getTime() + servico.duracao_minutos * 60000); 
     }
@@ -367,12 +368,13 @@ function AdminAgenda() {
   const handleModalSave = async () => {
     setIsSavingModal(true); setModalError(null);
     try {
-      if (!modalServicoId || !modalProfissionalId || !modalNome) throw new Error('Nome, Serviço e Profissional são obrigatórios.');
+      if (!modalServicoId || !modalProfissionalId || !modalNome) throw new Error('Dados incompletos.');
       
+      // 1. SALVAR CLIENTE NA BASE (Importante)
       const telLimpo = modalTelefone.replace(/[^0-9]/g, '');
       if (telLimpo && telLimpo.length >= 10) {
           await supabase.from('clientes').upsert({ nome: modalNome, telefone: telLimpo }, { onConflict: 'telefone' });
-          fetchModalData(); 
+          fetchModalData(); // Atualiza cache local
       }
 
       const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
@@ -389,7 +391,7 @@ function AdminAgenda() {
       else await supabase.from('agendamentos').update(payload).eq('id', selectedEvent.id);
 
       closeModal(); fetchAgendamentos(); 
-    } catch (e) { setModalError(e.message || "Erro ao salvar."); } finally { setIsSavingModal(false); }
+    } catch (e) { setModalError(e.message || "Erro."); } finally { setIsSavingModal(false); }
   };
 
   const handleModalCancel = async () => {
@@ -398,11 +400,12 @@ function AdminAgenda() {
         await supabase.from('agendamentos').update({ status: 'cancelado', cancelamento_motivo: adminCancelReason }).eq('id', selectedEvent.id);
         handleEnviarWhatsApp(selectedEvent, 'cancelamento');
         closeModal(); fetchAgendamentos();
-    } catch (e) { setModalError('Erro ao cancelar agendamento.'); } finally { setIsSavingModal(false); }
+    } catch (e) { setModalError('Erro.'); } finally { setIsSavingModal(false); }
   };
 
   const eventStyleGetter = (event, start, end, isSelected) => ({ style: { backgroundColor: 'transparent', border: 'none', padding: '0px', overflow: 'visible', zIndex: isSelected ? 100 : 20, height: '100%' } });
 
+  // --- RENDERIZAÇÃO: LISTA DE HOJE ---
   const renderListaHoje = () => {
     const hojeStr = new Date().toLocaleDateString('pt-BR');
     const agendamentosHoje = agendamentosRawState.filter(ag => {
@@ -411,12 +414,12 @@ function AdminAgenda() {
     });
 
     return (
-        <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/60 border border-slate-100 overflow-hidden animate-in fade-in duration-500">
+        <div className="bg-white rounded-3xl shadow-lg border border-slate-100 overflow-hidden animate-in fade-in duration-500">
             <div className="p-5 bg-gradient-to-r from-fuchsia-50 to-white border-b border-fuchsia-100 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-3"><div className="bg-fuchsia-100 p-2 rounded-lg text-fuchsia-600">📅</div><div><h2 className="text-lg font-black text-slate-800">Atendimentos de Hoje</h2><p className="text-xs text-slate-500 font-bold uppercase">{hojeStr}</p></div></div>
                 <div className="flex gap-2">
-                    <button onClick={() => toggleSelectAllHoje(agendamentosHoje)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition">{selectedBulkIds.length === agendamentosHoje.length && agendamentosHoje.length > 0 ? 'Desmarcar Todos' : 'Selecionar Todos'}</button>
-                    {selectedBulkIds.length > 0 && <button onClick={handleBulkFinish} className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-green-200 animate-pulse transition"><span>✓</span> Finalizar ({selectedBulkIds.length})</button>}
+                    <button onClick={() => toggleSelectAllHoje(agendamentosHoje)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition">{selectedBulkIds.length === agendamentosHoje.length && agendamentosHoje.length > 0 ? 'Desmarcar' : 'Selecionar Todos'}</button>
+                    {selectedBulkIds.length > 0 && <button onClick={handleBulkFinish} className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg animate-pulse transition"><span>✓</span> Finalizar ({selectedBulkIds.length})</button>}
                     <button onClick={handleAdicionarExtraHoje} className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition">+ Encaixe Rápido</button>
                 </div>
             </div>
@@ -469,6 +472,8 @@ function AdminAgenda() {
 
       {viewMode === 'cards' && (
         <div className="space-y-8 animate-in fade-in duration-500">
+           
+           {/* Seção Avisos (Piscante) */}
            {proximosAgendamentos.length > 0 && (
              <div className="relative group overflow-hidden bg-white p-6 rounded-[2rem] border-2 border-fuchsia-100 shadow-sm">
                 <div className="absolute inset-0 border-4 border-fuchsia-200 rounded-[2rem] animate-pulse pointer-events-none opacity-50"></div>
@@ -494,33 +499,93 @@ function AdminAgenda() {
              </div>
            )}
 
+           {/* Cards de Agendamentos ATIVOS */}
            {diasOrdenadosCards.map(dia => (
               <div key={dia}>
-                 <div className="flex items-center gap-4 mb-4 mt-8"><h3 className="text-2xl font-black text-slate-700 capitalize tracking-tight">{formatarDataCabecalho(dia)}</h3><div className="h-1 flex-1 bg-slate-100 rounded-full"></div></div>
+                 <div className="flex items-center gap-4 mb-4 mt-8">
+                     <h3 className="text-2xl font-black text-slate-700 capitalize tracking-tight">{formatarDataCabecalho(dia)}</h3>
+                     <div className="h-1 flex-1 bg-slate-100 rounded-full"></div>
+                 </div>
+                 
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
                     {agendamentosAgrupados[dia].map(ag => (
                        <div key={ag.id} className={`bg-white rounded-[1.5rem] p-5 shadow-sm border-l-[6px] relative transition hover:-translate-y-1 hover:shadow-lg ${ag.status === 'em_atendimento' ? 'border-amber-400 bg-amber-50/50' : 'border-fuchsia-500'}`}>
                           
-                          <div className="absolute top-4 right-4 flex gap-2">
-                              <button onClick={() => handleEnviarWhatsApp(ag, 'contato')} className="w-8 h-8 flex items-center justify-center bg-green-50 text-green-600 rounded-full hover:bg-green-500 hover:text-white transition shadow-sm border border-green-100" title="WhatsApp"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></button>
-                              <button onClick={() => handleSelectEvent(ag)} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-fuchsia-50 hover:text-fuchsia-600 transition shadow-sm border border-slate-100" title="Editar">✎</button>
+                          {/* BOTÕES WHATSAPP SEPARADOS NO CARD */}
+                          <div className="absolute top-4 right-4 flex flex-col gap-1">
+                              <button 
+                                onClick={() => handleEnviarWhatsApp(ag, 'confirmacao')} 
+                                className="px-2 py-1 bg-green-50 text-green-700 rounded-lg text-[10px] font-bold hover:bg-green-500 hover:text-white transition border border-green-100 flex items-center gap-1 shadow-sm"
+                              >
+                                <span>✅</span> Confirmar
+                              </button>
+                              <button 
+                                onClick={() => handleEnviarWhatsApp(ag, 'lembrete')} 
+                                className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold hover:bg-blue-500 hover:text-white transition border border-blue-100 flex items-center gap-1 shadow-sm"
+                              >
+                                <span>⏰</span> Lembrar
+                              </button>
                           </div>
                           
-                          <div className="flex items-center gap-3 mb-3"><span className="text-3xl font-black text-slate-700 tracking-tighter">{formatarHora(ag.data_hora_inicio)}</span></div>
-                          <h4 className="font-bold text-lg text-slate-800 leading-tight capitalize mb-1">{ag.nome_cliente}</h4>
+                          <div className="flex items-center gap-3 mb-3 mt-1">
+                              <span className="text-3xl font-black text-slate-700 tracking-tighter">{formatarHora(ag.data_hora_inicio)}</span>
+                          </div>
+                          
+                          <h4 className="font-bold text-lg text-slate-800 leading-tight capitalize mb-1 pr-16">{ag.nome_cliente}</h4>
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{ag.servicos?.nome}</p>
                           <p className="text-xs text-slate-400 mt-1">Prof: {ag.profissionais?.nome}</p>
 
-                          <div className="mt-6 pt-4 border-t border-slate-100/50">
-                             {ag.status === 'confirmado' && <button onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} className="w-full py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition transform active:scale-95">▶ Iniciar Atendimento</button>}
-                             {ag.status === 'em_atendimento' && <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="w-full py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg shadow-green-200 animate-pulse hover:bg-green-700 transition transform active:scale-95">✓ Finalizar</button>}
-                             {ag.status === 'finalizado' && <div className="w-full py-2 bg-slate-100 text-slate-400 font-bold rounded-xl text-center text-xs uppercase tracking-widest">Concluído</div>}
+                          <div className="mt-6 pt-4 border-t border-slate-100/50 flex gap-2">
+                             {ag.status === 'confirmado' && (
+                                <button onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition transform active:scale-95 text-xs">▶ Iniciar</button>
+                             )}
+                             {ag.status === 'em_atendimento' && (
+                                <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg shadow-green-200 animate-pulse hover:bg-green-700 transition transform active:scale-95 text-xs">✓ Finalizar</button>
+                             )}
+                             
+                             <button onClick={() => handleSelectEvent(ag)} className="px-3 py-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-200 transition">✎</button>
                           </div>
                        </div>
                     ))}
                  </div>
               </div>
            ))}
+
+           {/* --- ÁREA DE CONCLUÍDOS (SEPARADA) --- */}
+           <div className="mt-16 pt-8 border-t-2 border-dashed border-slate-200">
+              <button 
+                onClick={() => setShowConcluidos(!showConcluidos)} 
+                className="w-full py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-200 transition flex items-center justify-center gap-2"
+              >
+                {showConcluidos ? 'Ocultar Histórico de Concluídos' : '📂 Ver Histórico de Concluídos (Arquivo)'}
+              </button>
+
+              {showConcluidos && (
+                <div className="mt-8 space-y-12 animate-in fade-in slide-in-from-bottom-4">
+                   {Object.keys(concluidosAgrupados).length === 0 && <p className="text-center text-slate-400">Nenhum histórico encontrado.</p>}
+                   {Object.keys(concluidosAgrupados).map(mesAno => (
+                      <div key={mesAno}>
+                         <h2 className="text-3xl font-black text-slate-300 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">{mesAno}</h2>
+                         {Object.keys(concluidosAgrupados[mesAno]).map(dia => (
+                            <div key={dia} className="mb-6">
+                               <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 pl-2 border-l-4 border-slate-200">{formatarDataCabecalho(dia)}</h3>
+                               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                  {concluidosAgrupados[mesAno][dia].map(ag => (
+                                     <div key={ag.id} className="bg-slate-50 p-3 rounded-xl border border-slate-100 opacity-70 hover:opacity-100 transition">
+                                        <span className="text-xs font-black text-slate-400 block">{formatarHora(ag.data_hora_inicio)}</span>
+                                        <p className="font-bold text-slate-600 text-sm truncate">{ag.nome_cliente}</p>
+                                        <p className="text-[10px] text-slate-400 truncate">{ag.servicos?.nome}</p>
+                                        <span className="text-[9px] uppercase bg-green-100 text-green-700 px-1 rounded mt-1 inline-block">Concluído</span>
+                                     </div>
+                                  ))}
+                               </div>
+                            </div>
+                         ))}
+                      </div>
+                   ))}
+                </div>
+              )}
+           </div>
         </div>
       )}
 
@@ -564,19 +629,16 @@ function AdminAgenda() {
              <div className="p-6 md:p-8 space-y-5">
                 {showCancelOptions ? (
                   <div className="bg-red-50 p-6 rounded-3xl text-center border border-red-100 animate-in fade-in">
-                     <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🗑️</div>
                      <h3 className="text-red-900 font-black text-lg mb-2">Cancelar Agendamento?</h3>
-                     <p className="text-red-700 text-sm mb-4">Selecione o motivo.</p>
                      <select value={adminCancelReason} onChange={e => setAdminCancelReason(e.target.value)} className="w-full p-4 border border-red-200 bg-white rounded-2xl mb-4 text-sm outline-none focus:ring-2 focus:ring-red-200">{MOTIVOS_ADMIN.map(m => <option key={m} value={m}>{m}</option>)}</select>
                      <div className="flex gap-3"><button onClick={() => setShowCancelOptions(false)} className="flex-1 py-3 bg-white text-gray-500 rounded-xl font-bold border border-gray-200 hover:bg-gray-50">Voltar</button><button onClick={handleModalCancel} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 hover:bg-red-700">Confirmar</button></div>
                   </div>
                 ) : (
                   <>
-                     {/* --- BOTÕES WHATSAPP RESTAURADOS (DO ARQUIVO COPIA) --- */}
                      {modalMode === 'edit' && (
                         <div className="flex gap-3 mb-4">
-                            <button type="button" onClick={() => handleEnviarWhatsApp({ ...selectedEvent, telefone_cliente: modalTelefone }, 'confirmacao')} className="flex-1 py-3 bg-blue-50 text-blue-700 rounded-xl font-bold border border-blue-100 hover:bg-blue-100 text-xs flex items-center justify-center gap-2"><span>💬</span> Confirmar</button>
-                            <button type="button" onClick={() => handleEnviarWhatsApp({ ...selectedEvent, telefone_cliente: modalTelefone }, 'lembrete')} className="flex-1 py-3 bg-green-50 text-green-700 rounded-xl font-bold border border-green-100 hover:bg-green-100 text-xs flex items-center justify-center gap-2"><span>⏰</span> Lembrar</button>
+                            <button type="button" onClick={() => handleEnviarWhatsApp({ ...selectedEvent, telefone_cliente: modalTelefone }, 'confirmacao')} className="flex-1 py-3 bg-blue-50 text-blue-700 rounded-xl font-bold border border-blue-100 hover:bg-blue-100 text-xs flex items-center justify-center gap-2"><span>✅</span> Confirmar</button>
+                            <button type="button" onClick={() => handleEnviarWhatsApp({ ...selectedEvent, telefone_cliente: modalTelefone }, 'lembrete')} className="flex-1 py-3 bg-purple-50 text-purple-700 rounded-xl font-bold border border-purple-100 hover:bg-purple-100 text-xs flex items-center justify-center gap-2"><span>⏰</span> Lembrar</button>
                         </div>
                      )}
 
@@ -586,7 +648,6 @@ function AdminAgenda() {
                             <input list="lista-clientes" type="text" value={modalNome} onChange={handleNomeChange} className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold text-slate-700 ring-1 ring-slate-200 focus:ring-2 focus:ring-fuchsia-500 transition" placeholder="Busque ou digite..." />
                             <datalist id="lista-clientes">{allClientes.map(c => (<option key={c.id} value={c.nome} />))}</datalist>
                          </div>
-
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase ml-2 mb-1 block">Serviço</label><select value={modalServicoId} onChange={e => setModalServicoId(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-medium text-sm focus:ring-2 focus:ring-fuchsia-500"><option value="">Selecione...</option>{allServicos.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
                             <div><label className="text-[10px] font-bold text-slate-400 uppercase ml-2 mb-1 block">Profissional</label><select value={modalProfissionalId} onChange={e => setModalProfissionalId(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-medium text-sm focus:ring-2 focus:ring-fuchsia-500"><option value="">Selecione...</option>{allProfissionais.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>
