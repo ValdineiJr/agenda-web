@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '/src/supabaseClient.js';
 import { useAuth } from '/src/AuthContext.jsx';
 
@@ -55,7 +55,6 @@ function formatarHora(dataISO) {
 }
 
 function getMesAno(dataString) {
-  // Recebe dd/mm/yyyy e retorna "Fevereiro 2026"
   const [dia, mes, ano] = dataString.split('/');
   const data = new Date(`${ano}-${mes}-${dia}T12:00:00`);
   return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(data);
@@ -114,7 +113,7 @@ function AdminAgenda() {
   // --- STATES DE DADOS ---
   const [agendamentosRawState, setAgendamentosRawState] = useState([]); 
   const [agendamentosAgrupados, setAgendamentosAgrupados] = useState({});
-  const [concluidosAgrupados, setConcluidosAgrupados] = useState({}); // NOVO: Separado por mês
+  const [concluidosAgrupados, setConcluidosAgrupados] = useState({});
   const [eventosCalendario, setEventosCalendario] = useState([]);
   const [proximosAgendamentos, setProximosAgendamentos] = useState([]);
 
@@ -125,7 +124,7 @@ function AdminAgenda() {
   const [selectedBulkIds, setSelectedBulkIds] = useState([]); 
   const [calendarView, setCalendarView] = useState('week');
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const [showConcluidos, setShowConcluidos] = useState(false); // Toggle para ver histórico
+  const [showConcluidos, setShowConcluidos] = useState(false);
 
   // --- DADOS AUXILIARES ---
   const [allServicos, setAllServicos] = useState([]);
@@ -202,7 +201,7 @@ function AdminAgenda() {
       
       let filtrados = filtroProfissionalId ? raw.filter(ag => ag.profissional_id == filtroProfissionalId) : raw;
       
-      // SEPARAÇÃO: Ativos (Confirmado/Em Atendimento) vs Concluídos
+      // SEPARAÇÃO: Ativos vs Concluídos
       const ativos = filtrados.filter(ag => ag.status === 'confirmado' || ag.status === 'em_atendimento');
       const concluidos = filtrados.filter(ag => ag.status === 'finalizado');
       
@@ -215,17 +214,18 @@ function AdminAgenda() {
          return d >= agora && d < limite;
       }));
       
-      // Agrupamento dos ATIVOS por Dia
+      // Agrupamento dos ATIVOS
       const agrupar = (lista) => lista.reduce((acc, ag) => {
           const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
           if (!acc[d]) acc[d] = []; acc[d].push(ag); return acc;
       }, {});
       setAgendamentosAgrupados(agrupar(ativos));
 
-      // Agrupamento dos CONCLUÍDOS por Mês/Ano
+      // CORREÇÃO DO ERRO DE TELA BRANCA AQUI:
+      // A função reduce deve ser executada imediatamente sobre a lista, não passada como referência.
       const agruparConcluidos = (lista) => lista.reduce((acc, ag) => {
           const d = new Date(ag.data_hora_inicio).toLocaleDateString('pt-BR');
-          const mesAno = getMesAno(d); // "Fevereiro 2026"
+          const mesAno = getMesAno(d);
           
           if (!acc[mesAno]) acc[mesAno] = {};
           if (!acc[mesAno][d]) acc[mesAno][d] = [];
@@ -233,9 +233,11 @@ function AdminAgenda() {
           acc[mesAno][d].push(ag);
           return acc;
       }, {});
-      setConcluidosAgrupados(agruparConcluidos);
+      
+      // Passamos o RESULTADO (objeto), não a função
+      setConcluidosAgrupados(agruparConcluidos(concluidos));
 
-      // Calendário mostra TUDO (incluindo finalizados para histórico visual)
+      // Calendário mostra TUDO exceto cancelados
       const eventos = filtrados.filter(ag => ag.status !== 'cancelado').map(ag => ({
         id: ag.id, title: ag.nome_cliente, start: new Date(ag.data_hora_inicio), end: new Date(ag.data_hora_fim), resource: ag, 
       }));
@@ -256,12 +258,11 @@ function AdminAgenda() {
     const horaF = formatarHora(agendamento.data_hora_inicio);
     const servico = agendamento.servicos?.nome || 'Serviço';
     
-    // MENSAGEM EXATA SOLICITADA
     let msg = "";
     if (tipo === 'confirmacao') {
         msg = `Olá ${nome}, tudo bem? Passando para confirmar seu horário de *${servico}* para o dia *${dataF} às ${horaF}*. Podemos confirmar?`;
     } else if (tipo === 'lembrete') {
-        msg = `Olá ${nome}, tudo bem? Passando para lembrar do seu horário de *${servico}* para o dia *${dataF} às ${horaF}*.`;
+        msg = `Olá ${nome}! Passando para lembrar do seu horário de *${servico}* amanhã, dia *${dataF} às ${horaF}*.`;
     } else if (tipo === 'cancelamento') {
          msg = `Olá ${nome}. Infelizmente precisamos cancelar/remarcar seu horário de *${servico}* no dia ${dataF}. Motivo: ${adminCancelReason}. Entre em contato para reagendar.`;
     } else {
@@ -277,7 +278,11 @@ function AdminAgenda() {
   };
 
   const toggleBulkSelect = (id) => setSelectedBulkIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  const toggleSelectAllHoje = (lista) => setSelectedBulkIds(selectedBulkIds.length === lista.length ? [] : lista.map(ag => ag.id));
+  
+  const toggleSelectAllHoje = (listaDeHoje) => {
+    if (selectedBulkIds.length === listaDeHoje.length) setSelectedBulkIds([]); 
+    else setSelectedBulkIds(listaDeHoje.map(ag => ag.id));
+  };
 
   const handleBulkFinish = async () => {
     if (selectedBulkIds.length === 0) return alert("Selecione pelo menos um agendamento.");
@@ -287,7 +292,6 @@ function AdminAgenda() {
     setSelectedBulkIds([]); fetchAgendamentos(); setLoading(false);
   };
 
-  // --- AUTOCOMPLETE + CADASTRO AUTOMÁTICO NA BUSCA ---
   const handleNomeChange = (e) => {
     const valor = e.target.value;
     setModalNome(valor);
@@ -295,7 +299,6 @@ function AdminAgenda() {
     if (clienteExistente) setModalTelefone(clienteExistente.telefone);
   };
 
-  // --- FUNÇÕES "NOVO SERVIÇO" ---
   const handleAdicionarExtraHoje = () => {
     setModalMode('new');
     setSelectedEvent({ start: new Date(), end: new Date() });
@@ -370,11 +373,10 @@ function AdminAgenda() {
     try {
       if (!modalServicoId || !modalProfissionalId || !modalNome) throw new Error('Dados incompletos.');
       
-      // 1. SALVAR CLIENTE NA BASE (Importante)
       const telLimpo = modalTelefone.replace(/[^0-9]/g, '');
       if (telLimpo && telLimpo.length >= 10) {
           await supabase.from('clientes').upsert({ nome: modalNome, telefone: telLimpo }, { onConflict: 'telefone' });
-          fetchModalData(); // Atualiza cache local
+          fetchModalData(); 
       }
 
       const servico = allServicos.find(s => s.id === parseInt(modalServicoId));
@@ -405,7 +407,6 @@ function AdminAgenda() {
 
   const eventStyleGetter = (event, start, end, isSelected) => ({ style: { backgroundColor: 'transparent', border: 'none', padding: '0px', overflow: 'visible', zIndex: isSelected ? 100 : 20, height: '100%' } });
 
-  // --- RENDERIZAÇÃO: LISTA DE HOJE ---
   const renderListaHoje = () => {
     const hojeStr = new Date().toLocaleDateString('pt-BR');
     const agendamentosHoje = agendamentosRawState.filter(ag => {
@@ -473,7 +474,6 @@ function AdminAgenda() {
       {viewMode === 'cards' && (
         <div className="space-y-8 animate-in fade-in duration-500">
            
-           {/* Seção Avisos (Piscante) */}
            {proximosAgendamentos.length > 0 && (
              <div className="relative group overflow-hidden bg-white p-6 rounded-[2rem] border-2 border-fuchsia-100 shadow-sm">
                 <div className="absolute inset-0 border-4 border-fuchsia-200 rounded-[2rem] animate-pulse pointer-events-none opacity-50"></div>
@@ -499,7 +499,6 @@ function AdminAgenda() {
              </div>
            )}
 
-           {/* Cards de Agendamentos ATIVOS */}
            {diasOrdenadosCards.map(dia => (
               <div key={dia}>
                  <div className="flex items-center gap-4 mb-4 mt-8">
@@ -511,20 +510,9 @@ function AdminAgenda() {
                     {agendamentosAgrupados[dia].map(ag => (
                        <div key={ag.id} className={`bg-white rounded-[1.5rem] p-5 shadow-sm border-l-[6px] relative transition hover:-translate-y-1 hover:shadow-lg ${ag.status === 'em_atendimento' ? 'border-amber-400 bg-amber-50/50' : 'border-fuchsia-500'}`}>
                           
-                          {/* BOTÕES WHATSAPP SEPARADOS NO CARD */}
                           <div className="absolute top-4 right-4 flex flex-col gap-1">
-                              <button 
-                                onClick={() => handleEnviarWhatsApp(ag, 'confirmacao')} 
-                                className="px-2 py-1 bg-green-50 text-green-700 rounded-lg text-[10px] font-bold hover:bg-green-500 hover:text-white transition border border-green-100 flex items-center gap-1 shadow-sm"
-                              >
-                                <span>✅</span> Confirmar
-                              </button>
-                              <button 
-                                onClick={() => handleEnviarWhatsApp(ag, 'lembrete')} 
-                                className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold hover:bg-blue-500 hover:text-white transition border border-blue-100 flex items-center gap-1 shadow-sm"
-                              >
-                                <span>⏰</span> Lembrar
-                              </button>
+                              <button onClick={() => handleEnviarWhatsApp(ag, 'confirmacao')} className="px-2 py-1 bg-green-50 text-green-700 rounded-lg text-[10px] font-bold hover:bg-green-500 hover:text-white transition border border-green-100 flex items-center gap-1 shadow-sm"><span>✅</span> Confirmar</button>
+                              <button onClick={() => handleEnviarWhatsApp(ag, 'lembrete')} className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold hover:bg-blue-500 hover:text-white transition border border-blue-100 flex items-center gap-1 shadow-sm"><span>⏰</span> Lembrar</button>
                           </div>
                           
                           <div className="flex items-center gap-3 mb-3 mt-1">
@@ -536,13 +524,8 @@ function AdminAgenda() {
                           <p className="text-xs text-slate-400 mt-1">Prof: {ag.profissionais?.nome}</p>
 
                           <div className="mt-6 pt-4 border-t border-slate-100/50 flex gap-2">
-                             {ag.status === 'confirmado' && (
-                                <button onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition transform active:scale-95 text-xs">▶ Iniciar</button>
-                             )}
-                             {ag.status === 'em_atendimento' && (
-                                <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg shadow-green-200 animate-pulse hover:bg-green-700 transition transform active:scale-95 text-xs">✓ Finalizar</button>
-                             )}
-                             
+                             {ag.status === 'confirmado' && <button onClick={() => handleUpdateStatus(ag.id, 'em_atendimento')} className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-200 hover:bg-amber-600 transition transform active:scale-95 text-xs">▶ Iniciar</button>}
+                             {ag.status === 'em_atendimento' && <button onClick={() => handleUpdateStatus(ag.id, 'finalizado')} className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg shadow-green-200 animate-pulse hover:bg-green-700 transition transform active:scale-95 text-xs">✓ Finalizar</button>}
                              <button onClick={() => handleSelectEvent(ag)} className="px-3 py-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-200 transition">✎</button>
                           </div>
                        </div>
@@ -551,12 +534,9 @@ function AdminAgenda() {
               </div>
            ))}
 
-           {/* --- ÁREA DE CONCLUÍDOS (SEPARADA) --- */}
+           {/* --- HISTÓRICO DE CONCLUÍDOS --- */}
            <div className="mt-16 pt-8 border-t-2 border-dashed border-slate-200">
-              <button 
-                onClick={() => setShowConcluidos(!showConcluidos)} 
-                className="w-full py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-200 transition flex items-center justify-center gap-2"
-              >
+              <button onClick={() => setShowConcluidos(!showConcluidos)} className="w-full py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-200 transition flex items-center justify-center gap-2">
                 {showConcluidos ? 'Ocultar Histórico de Concluídos' : '📂 Ver Histórico de Concluídos (Arquivo)'}
               </button>
 
