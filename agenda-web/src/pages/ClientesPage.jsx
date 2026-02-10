@@ -6,20 +6,17 @@ function ClientesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // States Filtros/Mensagem
   const [filtroAniversario, setFiltroAniversario] = useState(false);
   const [showMsgConfig, setShowMsgConfig] = useState(false);
   const [msgAniversario, setMsgAniversario] = useState(
     'Olá {nome}! 🎂 Parabéns pelo seu dia! O Studio Patricia Ramalho deseja muitas felicidades e um ano repleto de brilho. Que tal agendar um momento especial para comemorar?'
   );
 
-  // States Edição
   const [editingClient, setEditingClient] = useState(null); 
   const [editNome, setEditNome] = useState('');
   const [editTelefone, setEditTelefone] = useState('');
   const [editNascimento, setEditNascimento] = useState(''); 
 
-  // NOVO: Seleção em Massa
   const [selectedBirthdays, setSelectedBirthdays] = useState([]);
 
   useEffect(() => {
@@ -48,7 +45,6 @@ function ClientesPage() {
     else { alert('Atualizado!'); setEditingClient(null); fetchClientes(); }
   };
 
-  // --- Lógica de Filtro ---
   const clientesFiltrados = clientes.filter((cliente) => {
     if (!filtroAniversario) return true;
     if (!cliente.data_nascimento) return false;
@@ -57,7 +53,6 @@ function ClientesPage() {
     return mesCliente === mesAtual;
   });
 
-  // --- Lógica Seleção em Massa ---
   const toggleSelectBirthday = (id) => {
     setSelectedBirthdays(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
@@ -71,29 +66,21 @@ function ClientesPage() {
     if (selectedBirthdays.length === 0) return alert("Selecione pelo menos um cliente.");
     if (!window.confirm(`Você está prestes a abrir ${selectedBirthdays.length} janelas do WhatsApp. Continuar?`)) return;
 
-    // Aviso: Navegadores bloqueiam popups em loop rápido.
-    // Vamos tentar abrir um por um com pequeno delay ou alertar.
     const targets = clientesFiltrados.filter(c => selectedBirthdays.includes(c.id));
-    
     targets.forEach((c, index) => {
        const msg = msgAniversario.replace('{nome}', c.nome);
        const link = `https://wa.me/55${c.telefone}?text=${encodeURIComponent(msg)}`;
-       // Pequeno hack para tentar abrir multiplas abas
-       setTimeout(() => {
-          window.open(link, '_blank');
-       }, index * 800); 
+       setTimeout(() => { window.open(link, '_blank'); }, index * 800); 
     });
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
-      
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <h1 className="text-3xl font-black text-slate-800 mb-2">Gerenciar Clientes</h1>
         <p className="text-slate-500 text-sm">Base de clientes e marketing de aniversário.</p>
       </div>
 
-      {/* CONTROLES */}
       <div className="bg-gradient-to-r from-fuchsia-50 to-white p-6 rounded-2xl shadow-sm border border-fuchsia-100">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <button onClick={() => setFiltroAniversario(!filtroAniversario)} className={`px-6 py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 ${filtroAniversario ? 'bg-fuchsia-600 text-white ring-4 ring-fuchsia-200' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>
@@ -127,7 +114,6 @@ function ClientesPage() {
         )}
       </div>
 
-      {/* LISTA */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <h2 className="text-xl font-bold text-slate-800 mb-6 border-b border-slate-100 pb-2">
           {filtroAniversario ? '🎉 Aniversariantes Encontrados' : 'Lista Completa'}
@@ -166,7 +152,6 @@ function ClientesPage() {
                         </div>
                       </div>
                     ) : (
-                      /* FORMULÁRIO DE EDIÇÃO */
                       <div className="space-y-3 bg-slate-50 p-3 rounded-lg">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <input type="text" value={editNome} onChange={(e) => setEditNome(e.target.value)} className="p-2 text-sm rounded border border-slate-300" placeholder="Nome" />

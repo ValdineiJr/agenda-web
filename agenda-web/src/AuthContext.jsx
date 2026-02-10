@@ -10,14 +10,11 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // --- 1. CONFIGURAÇÃO DE TEMPO (AUMENTADO PARA 12 HORAS) ---
-  // Cobre o dia todo de trabalho sem deslogar
+  // 12 Horas de sessão
   const TEMPO_INATIVIDADE = 12 * 60 * 60 * 1000; 
-
   const lastCheckTime = useRef(0);
 
   const realizarLimpezaTotal = async () => {
-    console.warn("Sessão expirada: Renovando sistema...");
     try { await supabase.auth.signOut(); } catch (e) { /* ignore */ }
     localStorage.clear();
     sessionStorage.clear();
@@ -26,19 +23,13 @@ export const AuthProvider = ({ children }) => {
 
   const fetchProfile = async (user) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       
       if (error) {
-        // Fallback para admin principal se a tabela falhar
+        // Fallback de segurança
         const emailsAdmin = ['valdinei@seuemail.com', user.email]; 
         if (emailsAdmin.includes(user.email)) {
              setProfile({ id: user.id, role: 'admin', nome: user.email.split('@')[0], avatar: null });
-        } else {
-             console.error("Perfil não encontrado.");
         }
       } else {
         setProfile(data);
@@ -53,105 +44,95 @@ export const AuthProvider = ({ children }) => {
     let inatividadeTimer;
     let keepAliveInterval;
 
-    // --- 2. DETECTOR DE NOVA VERSÃO (CORREÇÃO ERRO 404) ---
-    // Se o navegador tentar carregar um arquivo antigo e falhar, recarrega a página
+    // --- BLINDAGEM 1: Recarregamento automático em caso de erro de versão (404) ---
     const handleChunkError = (event) => {
       if (event?.message && (
           event.message.includes('Loading chunk') || 
           event.message.includes('Importing a module script failed') ||
-          event.message.includes('missing')
+          event.message.includes('missing') ||
+          event.message.includes('404')
          )) {
-         console.log("Nova versão detectada (Erro de Chunk). Atualizando...");
+         // Se der erro de arquivo antigo, recarrega a página forçadamente
          window.location.reload(true);
       }
     };
     window.addEventListener('error', handleChunkError);
 
-    // --- 3. MONITOR DE INATIVIDADE ---
     const resetarTimerInatividade = () => {
         if (!mounted) return;
         if (inatividadeTimer) clearTimeout(inatividadeTimer);
-        inatividadeTimer = setTimeout(() => {
-            realizarLimpezaTotal();
-        }, TEMPO_INATIVIDADE);
+        inatividadeTimer = setTimeout(() => realizarLimpezaTotal(), TEMPO_INATIVIDADE);
     };
 
-    // --- 4. KEEPALIVE (Mantém token ativo) ---
     const startKeepAlive = () => {
         keepAliveInterval = setInterval(async () => {
             if (!mounted) return;
-            const { data, error } = await supabase.auth.getSession();
-            if (!error && data.session && !session) setSession(data.session);
-        }, 1000 * 60 * 10); // 10 minutos
+            // Verifica conexão silenciosamente
+            const { data } = await supabase.auth.getSession();
+            if (data?.session && !session) setSession(data.session);
+        }, 1000 * 60 * 5); 
     };
 
-    const eventosAtivos = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
-    eventosAtivos.forEach(evt => window.addEventListener(evt, resetarTimerInatividade));
+    const eventos = ['mousemove', 'click', 'keydown', 'touchstart'];
+    eventos.forEach(evt => window.addEventListener(evt, resetarTimerInatividade));
     resetarTimerInatividade();
     startKeepAlive();
 
-    // --- 5. INICIALIZAÇÃO ---
+    // --- BLINDAGEM 2: Inicialização Robusta ---
     const initializeAuth = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        
+        // Timeout de segurança: Se o Supabase não responder em 6s, libera o loading
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject("Timeout"), 6000));
+        const sessionPromise = supabase.auth.getSession();
+
+        const { data, error } = await Promise.race([sessionPromise, timeoutPromise])
+          .catch(() => ({ data: { session: null }, error: null })); // Se der timeout, assume sem sessão
+
         if (error) {
-            // Se o refresh token for inválido, limpa tudo
-            if (error.message.includes('refresh_token_not_found') || error.status === 400) {
+            if (error.message.includes('refresh_token_not_found')) {
                 realizarLimpezaTotal();
                 return;
             }
         }
 
-        if (mounted && data.session) {
+        if (mounted && data?.session) {
             setSession(data.session);
             await fetchProfile(data.session.user);
         }
       } catch (error) {
-        console.error("Erro auth init:", error);
+        console.error("Auth init:", error);
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) setLoading(false); // Garante que o loading sempre para
       }
     };
 
     initializeAuth();
 
-    // --- 6. LISTENER DO SUPABASE ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
-      
-      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      if (event === 'SIGNED_OUT') {
          setSession(null); setProfile(null); setLoading(false); return; 
       }
-      
-      if (newSession?.access_token !== session?.access_token) {
-          setSession(newSession);
-      }
-      
-      if (newSession?.user && !profile) {
-        await fetchProfile(newSession.user);
-      }
+      if (newSession?.access_token !== session?.access_token) setSession(newSession);
+      if (newSession?.user && !profile) await fetchProfile(newSession.user);
       setLoading(false);
     });
 
-    // --- 7. RECUPERAÇÃO DE FOCO (Celular) ---
     const handleFocus = async () => {
       const now = Date.now();
-      if (now - lastCheckTime.current < 60000) return; // Throttle 1min
+      if (now - lastCheckTime.current < 60000) return;
       lastCheckTime.current = now;
       const { data } = await supabase.auth.getSession();
-      if (data.session && session?.access_token !== data.session.access_token) {
-          setSession(data.session);
-      }
+      if (data.session && session?.access_token !== data.session.access_token) setSession(data.session);
     };
     window.addEventListener('focus', handleFocus);
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
-      window.removeEventListener('error', handleChunkError); // Limpa listener
+      window.removeEventListener('error', handleChunkError);
       window.removeEventListener('focus', handleFocus);
-      eventosAtivos.forEach(evt => window.removeEventListener(evt, resetarTimerInatividade));
+      eventos.forEach(evt => window.removeEventListener(evt, resetarTimerInatividade));
       if (inatividadeTimer) clearTimeout(inatividadeTimer);
       if (keepAliveInterval) clearInterval(keepAliveInterval);
     };
@@ -160,15 +141,13 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = profile?.role === 'admin';
   const isProfissional = profile?.role === 'professional';
 
-  const value = { session, profile, loading, isAdmin, isProfissional, signOut: realizarLimpezaTotal };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ session, profile, loading, isAdmin, isProfissional, signOut: realizarLimpezaTotal }}>
       {!loading ? children : (
         <div className="flex h-screen items-center justify-center bg-gray-50">
            <div className="flex flex-col items-center gap-4">
              <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-fuchsia-600"></div>
-             <p className="text-gray-500 font-semibold animate-pulse">Conectando...</p>
+             <p className="text-gray-500 font-semibold animate-pulse">Iniciando sistema...</p>
            </div>
         </div>
       )}

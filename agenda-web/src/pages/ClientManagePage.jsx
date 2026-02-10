@@ -2,21 +2,21 @@ import { useState, useEffect } from 'react';
 import { supabase } from '/src/supabaseClient.js';
 import { Link } from 'react-router-dom';
 
-// Função auxiliar para formatar data visualmente (ex: 20/11/2025 14:00)
+// Função auxiliar de formatação
 function formatarDataHora(iso) {
   if (!iso) return '';
   const dataObj = new Date(iso);
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(dataObj);
+  const dia = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(dataObj);
+  const hora = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(dataObj);
+  const semana = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(dataObj);
+  return { dia, hora, semana }; // Retorna objeto para flexibilidade visual
 }
 
 function ClientManagePage() {
-  // --- ESTADOS DO COMPONENTE ---
+  // --- ESTADOS ---
   const [telefoneBusca, setTelefoneBusca] = useState('');
   const [nascimentoBusca, setNascimentoBusca] = useState('');
-  const [lembrarDados, setLembrarDados] = useState(false); // Checkbox
+  const [lembrarDados, setLembrarDados] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -24,61 +24,49 @@ function ClientManagePage() {
   
   const [cliente, setCliente] = useState(null);
   
-  // Listas de Agendamentos (Separadas por Status)
+  // Listas de Agendamentos
   const [agendamentosAtivos, setAgendamentosAtivos] = useState([]);
-  const [agendamentosFinalizados, setAgendamentosFinalizados] = useState([]); // NOVO: Realizados
+  const [agendamentosFinalizados, setAgendamentosFinalizados] = useState([]); 
   const [agendamentosCancelados, setAgendamentosCancelados] = useState([]);
   
+  // Edição
   const [editNome, setEditNome] = useState('');
   const [editNascimento, setEditNascimento] = useState('');
   const [isSavingData, setIsSavingData] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false); // Toggle para editar perfil
 
-  // --- CONFIGURAÇÃO DO WHATSAPP DO SALÃO ---
+  // Controle de Abas (Tabs)
+  const [activeTab, setActiveTab] = useState('proximos'); // 'proximos', 'realizados', 'cancelados'
+
   const NUMERO_SALAO = '5519993562075'; 
 
-  // --- EFEITO: RECUPERAR DADOS SALVOS AO ABRIR A TELA ---
+  // --- EFEITO INICIAL ---
   useEffect(() => {
     const telefoneSalvo = localStorage.getItem('salao_cliente_telefone');
     const nascimentoSalvo = localStorage.getItem('salao_cliente_nascimento');
-
     if (telefoneSalvo && nascimentoSalvo) {
       setTelefoneBusca(telefoneSalvo);
       setNascimentoBusca(nascimentoSalvo);
-      setLembrarDados(true); // Deixa a caixinha marcada pois já tinha dados
+      setLembrarDados(true);
     }
   }, []);
 
-  // --- FUNÇÕES ---
-
-  // 1. Buscar Agendamentos e Dados do Cliente (Login)
+  // --- BUSCAR DADOS ---
   const handleBuscarAgendamento = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSucesso(null);
-    setCliente(null);
-    // Limpa as listas
-    setAgendamentosAtivos([]);
-    setAgendamentosFinalizados([]);
-    setAgendamentosCancelados([]);
+    setLoading(true); setError(null); setSucesso(null); setCliente(null);
+    setAgendamentosAtivos([]); setAgendamentosFinalizados([]); setAgendamentosCancelados([]);
 
-    // Remove caracteres não numéricos do telefone para busca
     const telefoneLimpo = telefoneBusca.replace(/[^0-9]/g, '');
 
     try {
-      // 1.1 Busca dados cadastrais do cliente
       const { data: clienteData, error: clienteError } = await supabase
-        .from('clientes')
-        .select('*')
-        .eq('telefone', telefoneLimpo)
-        .eq('data_nascimento', nascimentoBusca)
-        .single();
+        .from('clientes').select('*')
+        .eq('telefone', telefoneLimpo).eq('data_nascimento', nascimentoBusca).single();
       
-      if (clienteError || !clienteData) {
-        throw new Error('Dados não encontrados. Verifique se o telefone e a data de nascimento estão corretos.');
-      }
+      if (clienteError || !clienteData) throw new Error('Dados não encontrados. Verifique as informações.');
 
-      // --- LÓGICA DE SALVAR DADOS (LOCALSTORAGE) ---
+      // Salvar/Remover LocalStorage
       if (lembrarDados) {
         localStorage.setItem('salao_cliente_telefone', telefoneBusca);
         localStorage.setItem('salao_cliente_nascimento', nascimentoBusca);
@@ -87,336 +75,261 @@ function ClientManagePage() {
         localStorage.removeItem('salao_cliente_nascimento');
       }
       
-      // Salva dados no estado
       setCliente(clienteData);
       setEditNome(clienteData.nome || '');
       setEditNascimento(clienteData.data_nascimento || '');
 
-      // 1.2 Busca TODOS os agendamentos (Passados e Futuros) deste cliente
-      // IMPORTANTE: Removemos o filtro de data (.gte) para pegar o histórico completo
-      // Ordenamos DESC (decrescente) para facilitar a visualização do histórico
-      const { data: agendamentosData, error: agendamentosError } = await supabase
+      // Buscar histórico completo
+      const { data: agendamentosData, error: agError } = await supabase
         .from('agendamentos')
-        .select(`
-          id, 
-          data_hora_inicio, 
-          status, 
-          cancelamento_motivo,
-          servicos ( nome ),
-          profissionais ( nome )
-        `)
+        .select(`id, data_hora_inicio, status, cancelamento_motivo, servicos ( nome ), profissionais ( nome )`)
         .eq('telefone_cliente', telefoneLimpo)
         .order('data_hora_inicio', { ascending: false }); 
 
-      if (agendamentosError) {
-        throw agendamentosError;
-      }
+      if (agError) throw agError;
 
-      // 1.3 Separa os agendamentos nas listas corretas
-      const ativos = [];
-      const finalizados = [];
-      const cancelados = [];
-
+      const ativos = []; const finalizados = []; const cancelados = [];
       agendamentosData.forEach(ag => {
-        if (ag.status === 'confirmado' || ag.status === 'em_atendimento') {
-          ativos.push(ag);
-        } 
-        else if (ag.status === 'finalizado') {
-          finalizados.push(ag);
-        } 
-        else if (ag.status === 'cancelado') {
-          cancelados.push(ag);
-        }
+        if (ag.status === 'confirmado' || ag.status === 'em_atendimento') ativos.push(ag);
+        else if (ag.status === 'finalizado') finalizados.push(ag);
+        else if (ag.status === 'cancelado') cancelados.push(ag);
       });
 
-      // Reordena os ATIVOS para Ascendente (o mais próximo primeiro)
-      // O banco trouxe decrescente, então invertemos ou ordenamos novamente
-      ativos.sort((a, b) => new Date(a.data_hora_inicio) - new Date(b.data_hora_inicio));
+      ativos.sort((a, b) => new Date(a.data_hora_inicio) - new Date(b.data_hora_inicio)); // Mais próximo primeiro
 
       setAgendamentosAtivos(ativos);
       setAgendamentosFinalizados(finalizados);
       setAgendamentosCancelados(cancelados);
 
     } catch (error) {
-      console.error('Erro ao buscar:', error);
       setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Função de Logout (Limpar tela apenas)
   const handleSair = () => {
-    setCliente(null);
-    setSucesso(null);
-    setError(null);
+    setCliente(null); setSucesso(null); setError(null);
+    setAgendamentosAtivos([]);
   };
   
-  // 2. Salvar Alterações de Dados Pessoais (Nome/Data Nasc)
   const handleSalvarDados = async (e) => {
     e.preventDefault();
-    setIsSavingData(true);
-    setError(null);
-    setSucesso(null);
-
-    const { error } = await supabase
-      .from('clientes')
-      .update({
-        nome: editNome,
-        data_nascimento: editNascimento || null
-      })
-      .eq('telefone', cliente.telefone);
-
-    if (error) {
-      setError('Não foi possível salvar seus dados. Tente novamente.');
-    } else {
-      setSucesso('Seus dados foram atualizados com sucesso!');
+    setIsSavingData(true); setError(null); setSucesso(null);
+    const { error } = await supabase.from('clientes').update({ nome: editNome, data_nascimento: editNascimento || null }).eq('telefone', cliente.telefone);
+    if (error) setError('Erro ao salvar.');
+    else {
+      setSucesso('Dados atualizados!');
       setCliente(prev => ({ ...prev, nome: editNome, data_nascimento: editNascimento }));
-      
-      if (lembrarDados && editNascimento) {
-         localStorage.setItem('salao_cliente_nascimento', editNascimento);
-         setNascimentoBusca(editNascimento);
-      }
+      setShowEditProfile(false);
+      if (lembrarDados) localStorage.setItem('salao_cliente_nascimento', editNascimento);
     }
     setIsSavingData(false);
   };
-  
-  // --- RENDERIZAÇÃO (JSX) ---
+
+  // --- RENDERIZAÇÃO ---
   return (
-    <div className="p-4 md:p-8 max-w-lg mx-auto bg-gray-50 shadow-md rounded-lg mt-10">
+    <div className="min-h-screen bg-slate-50 font-sans pb-20">
       
-      {/* Link de Voltar */}
-      <div className="flex justify-between items-center mb-4">
-        <Link 
-          to="/"
-          className="text-fuchsia-600 hover:underline text-sm"
-        >
-          &larr; Voltar para o Início
-        </Link>
+      {/* --- HEADER (FIXO) --- */}
+      <div className="bg-white shadow-sm sticky top-0 z-30">
+        <div className="max-w-lg mx-auto px-4 py-3 flex justify-between items-center">
+          <Link to="/" className="text-fuchsia-600 font-bold text-sm flex items-center gap-1 hover:opacity-80 transition">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5m7 7-7-7 7-7"/></svg>
+            Início
+          </Link>
+          <h1 className="text-lg font-black text-slate-800 tracking-tight">Área do Cliente</h1>
+          {cliente && (
+             <button onClick={handleSair} className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-full hover:bg-red-100 transition">
+               Sair
+             </button>
+          )}
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 mt-6">
+        
+        {/* MENSAGENS DE FEEDBACK */}
+        {error && <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-lg text-sm shadow-sm animate-fade-in">{error}</div>}
+        {sucesso && <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 text-green-700 rounded-r-lg text-sm shadow-sm animate-fade-in">{sucesso}</div>}
+
+        {/* --- TELA DE LOGIN --- */}
+        {!cliente && (
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden animate-fade-in-up">
+            <div className="bg-gradient-to-br from-fuchsia-600 to-purple-700 p-8 text-center text-white">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">👋</div>
+              <h2 className="text-2xl font-bold mb-1">Bem-vindo(a)!</h2>
+              <p className="text-fuchsia-100 text-sm">Acesse seus agendamentos e histórico.</p>
+            </div>
+            
+            <form onSubmit={handleBuscarAgendamento} className="p-8 space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Seu WhatsApp</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 text-slate-400">📱</span>
+                  <input type="tel" value={telefoneBusca} onChange={(e) => setTelefoneBusca(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-fuchsia-500 outline-none transition font-medium text-slate-700" placeholder="(00) 00000-0000" required />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Data de Nascimento</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 text-slate-400">📅</span>
+                  <input type="date" value={nascimentoBusca} onChange={(e) => setNascimentoBusca(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-fuchsia-500 outline-none transition font-medium text-slate-700" required />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 py-2">
+                <input id="lembrar" type="checkbox" checked={lembrarDados} onChange={(e) => setLembrarDados(e.target.checked)} className="w-5 h-5 text-fuchsia-600 rounded border-slate-300 focus:ring-fuchsia-500" />
+                <label htmlFor="lembrar" className="text-sm text-slate-600">Lembrar meus dados</label>
+              </div>
+
+              <button type="submit" disabled={loading} className="w-full py-4 bg-fuchsia-600 text-white font-bold rounded-xl shadow-lg shadow-fuchsia-200 hover:bg-fuchsia-700 hover:scale-[1.02] transition-all disabled:opacity-70 disabled:scale-100">
+                {loading ? 'Acessando...' : 'Entrar na minha área'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* --- ÁREA LOGADA --- */}
         {cliente && (
-           <button onClick={handleSair} className="text-sm text-gray-500 hover:text-red-600 underline">
-             Sair / Trocar Conta
-           </button>
+          <div className="animate-fade-in space-y-6">
+            
+            {/* CARTÃO DE PERFIL */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-24 h-24 bg-fuchsia-50 rounded-bl-full -mr-4 -mt-4 z-0"></div>
+               <div className="relative z-10 flex justify-between items-start">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Olá,</p>
+                    <h2 className="text-2xl font-black text-slate-800">{cliente.nome.split(' ')[0]}</h2>
+                    <p className="text-sm text-slate-500 mt-1">{cliente.telefone}</p>
+                  </div>
+                  <button onClick={() => setShowEditProfile(!showEditProfile)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2 rounded-xl transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  </button>
+               </div>
+
+               {/* Formulário de Edição (Expansível) */}
+               {showEditProfile && (
+                 <form onSubmit={handleSalvarDados} className="mt-6 pt-6 border-t border-slate-100 space-y-4 animate-fade-in">
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase">Nome Completo</label>
+                      <input type="text" value={editNome} onChange={(e) => setEditNome(e.target.value)} className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 outline-none focus:ring-1 focus:ring-fuchsia-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase">Data Nascimento</label>
+                      <input type="date" value={editNascimento} onChange={(e) => setEditNascimento(e.target.value)} className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200 outline-none focus:ring-1 focus:ring-fuchsia-500" />
+                    </div>
+                    <button type="submit" disabled={isSavingData} className="w-full py-2 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 transition">
+                      {isSavingData ? 'Salvando...' : 'Salvar Alterações'}
+                    </button>
+                 </form>
+               )}
+            </div>
+
+            {/* ABAS DE NAVEGAÇÃO */}
+            <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-100">
+               <button onClick={() => setActiveTab('proximos')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'proximos' ? 'bg-fuchsia-100 text-fuchsia-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                 PRÓXIMOS ({agendamentosAtivos.length})
+               </button>
+               <button onClick={() => setActiveTab('realizados')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'realizados' ? 'bg-green-100 text-green-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                 REALIZADOS
+               </button>
+               <button onClick={() => setActiveTab('cancelados')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'cancelados' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                 CANCELADOS
+               </button>
+            </div>
+
+            {/* CONTEÚDO DAS ABAS */}
+            <div className="space-y-4">
+              
+              {/* 1. ABA PRÓXIMOS */}
+              {activeTab === 'proximos' && (
+                <>
+                  {agendamentosAtivos.length === 0 ? (
+                    <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-200">
+                      <p className="text-slate-400 text-sm">Você não tem agendamentos futuros.</p>
+                      <Link to="/" className="mt-3 inline-block text-fuchsia-600 font-bold text-sm hover:underline">Agendar Agora</Link>
+                    </div>
+                  ) : (
+                    agendamentosAtivos.map(ag => {
+                      const dt = formatarDataHora(ag.data_hora_inicio);
+                      const msgAlterar = `Olá! Gostaria de *alterar* meu agendamento de ${ag.servicos?.nome} dia ${dt.dia}.`;
+                      const msgCancelar = `Olá! Preciso *cancelar* meu agendamento de ${ag.servicos?.nome} dia ${dt.dia}.`;
+
+                      return (
+                        <div key={ag.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                           <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="bg-fuchsia-100 text-fuchsia-700 text-xs font-black px-2 py-1 rounded uppercase">{dt.semana}</span>
+                                  <span className="text-slate-400 text-xs font-bold">{dt.dia}</span>
+                                </div>
+                                <h3 className="text-xl font-black text-slate-800">{dt.hora}</h3>
+                              </div>
+                              {ag.status === 'em_atendimento' && (
+                                <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full animate-pulse">EM ANDAMENTO</span>
+                              )}
+                           </div>
+                           
+                           <div className="border-l-4 border-fuchsia-500 pl-3 py-1 mb-4">
+                              <p className="font-bold text-slate-700 text-lg leading-tight">{ag.servicos?.nome}</p>
+                              <p className="text-xs text-slate-500 font-medium mt-0.5">Com: {ag.profissionais?.nome}</p>
+                           </div>
+
+                           <div className="flex gap-2">
+                              <a href={`https://wa.me/${NUMERO_SALAO}?text=${encodeURIComponent(msgAlterar)}`} target="_blank" className="flex-1 py-2.5 bg-blue-50 text-blue-600 text-xs font-bold rounded-xl text-center hover:bg-blue-100 transition">Alterar</a>
+                              <a href={`https://wa.me/${NUMERO_SALAO}?text=${encodeURIComponent(msgCancelar)}`} target="_blank" className="flex-1 py-2.5 bg-red-50 text-red-500 text-xs font-bold rounded-xl text-center hover:bg-red-100 transition">Cancelar</a>
+                           </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </>
+              )}
+
+              {/* 2. ABA REALIZADOS */}
+              {activeTab === 'realizados' && (
+                 agendamentosFinalizados.length === 0 ? <p className="text-center text-slate-400 py-10 text-sm">Nenhum histórico ainda.</p> : (
+                   agendamentosFinalizados.map(ag => {
+                      const dt = formatarDataHora(ag.data_hora_inicio);
+                      return (
+                        <div key={ag.id} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center opacity-75 hover:opacity-100 transition">
+                           <div>
+                              <p className="font-bold text-slate-700">{ag.servicos?.nome}</p>
+                              <p className="text-xs text-slate-400">{dt.dia} às {dt.hora} • {ag.profissionais?.nome}</p>
+                           </div>
+                           <div className="bg-green-100 text-green-700 p-1.5 rounded-full">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                           </div>
+                        </div>
+                      );
+                   })
+                 )
+              )}
+
+              {/* 3. ABA CANCELADOS */}
+              {activeTab === 'cancelados' && (
+                 agendamentosCancelados.length === 0 ? <p className="text-center text-slate-400 py-10 text-sm">Nenhum cancelamento.</p> : (
+                   agendamentosCancelados.map(ag => {
+                      const dt = formatarDataHora(ag.data_hora_inicio);
+                      return (
+                        <div key={ag.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex justify-between items-center">
+                           <div>
+                              <p className="font-bold text-slate-500 line-through">{ag.servicos?.nome}</p>
+                              <p className="text-xs text-slate-400">{dt.dia} • {ag.profissionais?.nome}</p>
+                              <p className="text-[10px] text-red-400 mt-1 font-bold bg-red-50 inline-block px-1 rounded">Motivo: {ag.cancelamento_motivo || 'Cliente'}</p>
+                           </div>
+                        </div>
+                      );
+                   })
+                 )
+              )}
+
+            </div>
+          </div>
         )}
       </div>
-      
-      <h1 className="text-3xl font-bold text-fuchsia-600 mb-6 text-center">
-        Área do Cliente
-      </h1>
-
-      {/* Mensagens de Feedback */}
-      {error && (
-        <div className="p-4 mb-4 text-red-800 bg-red-100 border border-red-300 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-      {sucesso && (
-        <div className="p-4 mb-4 text-green-800 bg-green-100 border border-green-300 rounded-lg text-sm">
-          {sucesso}
-        </div>
-      )}
-
-      {/* --- CENÁRIO 1: USUÁRIO NÃO LOGADO --- */}
-      {!cliente && (
-        <form onSubmit={handleBuscarAgendamento} className="space-y-4 bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-semibold text-gray-700">Consultar meus horários</h2>
-          <p className="text-sm text-gray-500">
-            Identifique-se para acessar seus agendamentos e histórico.
-          </p>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Telefone (WhatsApp)</label>
-            <input
-              type="tel"
-              value={telefoneBusca}
-              onChange={(e) => setTelefoneBusca(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 focus:border-fuchsia-500 focus:ring-fuchsia-500"
-              placeholder="(11) 99999-9999"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Data de Nascimento</label>
-            <input
-              type="date"
-              value={nascimentoBusca}
-              onChange={(e) => setNascimentoBusca(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 focus:border-fuchsia-500 focus:ring-fuchsia-500"
-              required
-            />
-          </div>
-
-          {/* Checkbox Lembrar Dados */}
-          <div className="flex items-center">
-            <input
-              id="lembrar-dados"
-              type="checkbox"
-              checked={lembrarDados}
-              onChange={(e) => setLembrarDados(e.target.checked)}
-              className="h-4 w-4 text-fuchsia-600 focus:ring-fuchsia-500 border-gray-300 rounded"
-            />
-            <label htmlFor="lembrar-dados" className="ml-2 block text-sm text-gray-900">
-              Lembrar meus dados neste dispositivo
-            </label>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full p-3 rounded-lg text-white font-semibold bg-fuchsia-600 hover:bg-fuchsia-700 disabled:bg-fuchsia-300 transition-colors"
-          >
-            {loading ? 'Buscando...' : 'Buscar meus dados'}
-          </button>
-        </form>
-      )}
-
-      {/* --- CENÁRIO 2: USUÁRIO LOGADO --- */}
-      {cliente && (
-        <div className="space-y-8">
-          
-          {/* 1. Formulário de Edição de Dados Pessoais */}
-          <form onSubmit={handleSalvarDados} className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 space-y-4">
-            <h2 className="text-xl font-bold text-gray-800 border-b pb-2">Meus Dados</h2>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Nome Completo</label>
-              <input
-                type="text"
-                value={editNome}
-                onChange={(e) => setEditNome(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 focus:border-fuchsia-500 focus:ring-fuchsia-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Data de Nascimento</label>
-              <input
-                type="date"
-                value={editNascimento}
-                onChange={(e) => setEditNascimento(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={isSavingData}
-              className="w-full py-2 px-4 rounded-md text-white font-medium bg-green-600 hover:bg-green-700 disabled:bg-green-300 transition-colors text-sm"
-            >
-              {isSavingData ? 'Salvando...' : 'Atualizar Dados'}
-            </button>
-          </form>
-
-          {/* 2. Lista de Agendamentos ATIVOS */}
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 space-y-6">
-            <h2 className="text-xl font-bold text-gray-800 border-b pb-2">Próximos Agendamentos</h2>
-            
-            {agendamentosAtivos.length === 0 ? (
-              <p className="text-gray-500 italic">Você não tem agendamentos futuros.</p>
-            ) : (
-              agendamentosAtivos.map(ag => {
-                const textoData = formatarDataHora(ag.data_hora_inicio);
-                
-                // Mensagem para Alterar
-                const msgAlterar = `Olá! Gostaria de *alterar o horário/data* do meu agendamento de ${ag.servicos?.nome} (ID: ${ag.id}) marcado para ${textoData}.`;
-                const linkAlterar = `https://wa.me/${NUMERO_SALAO}?text=${encodeURIComponent(msgAlterar)}`;
-
-                // Mensagem para Cancelar
-                const msgCancelar = `Olá! Infelizmente preciso *cancelar* meu agendamento de ${ag.servicos?.nome} (ID: ${ag.id}) marcado para ${textoData}.`;
-                const linkCancelar = `https://wa.me/${NUMERO_SALAO}?text=${encodeURIComponent(msgCancelar)}`;
-
-                return (
-                  <div key={ag.id} className="border border-gray-200 p-4 rounded-lg bg-gray-50">
-                    <div className="mb-3">
-                      {/* Badge de status (ex: Em Atendimento) */}
-                      {ag.status === 'em_atendimento' && (
-                        <span className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold mb-2">
-                          EM ATENDIMENTO
-                        </span>
-                      )}
-                      <h3 className="font-bold text-lg text-gray-800">{ag.servicos?.nome}</h3>
-                      <p className="text-gray-600">Profissional: <span className="font-medium">{ag.profissionais?.nome}</span></p>
-                      <p className="text-fuchsia-700 font-bold text-lg mt-1 capitalize">
-                        {textoData}
-                      </p>
-                    </div>
-
-                    <div className="bg-yellow-50 border-l-4 border-yellow-400 p-2 mb-4">
-                      <p className="text-xs text-yellow-800">
-                        <strong>Política:</strong> Alterações ou cancelamentos devem ser comunicados com antecedência mínima de 24h.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
-                      <a
-                        href={linkAlterar}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 text-center py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold text-sm transition-colors cursor-pointer"
-                      >
-                        Alterar Data/Horário
-                      </a>
-
-                      <a
-                        href={linkCancelar}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 text-center py-2 px-4 border border-red-500 text-red-600 hover:bg-red-50 rounded-md font-semibold text-sm transition-colors cursor-pointer"
-                      >
-                        Cancelar Agendamento
-                      </a>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-          
-          {/* 3. Histórico de FINALIZADOS (Novo) */}
-          {agendamentosFinalizados.length > 0 && (
-            <div className="bg-green-50 p-6 rounded-lg border border-green-200 space-y-4">
-              <h2 className="text-lg font-bold text-green-800 border-b border-green-200 pb-2">
-                Histórico de Atendimentos Realizados
-              </h2>
-              {agendamentosFinalizados.map(ag => (
-                <div key={ag.id} className="bg-white border border-green-100 p-3 rounded-md shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                  <div>
-                    <p className="font-bold text-gray-700 text-sm sm:text-base">{ag.servicos?.nome}</p>
-                    <p className="text-xs sm:text-sm text-gray-500">Profissional: {ag.profissionais?.nome}</p>
-                    <p className="text-xs sm:text-sm text-gray-500 mt-1">{formatarDataHora(ag.data_hora_inicio)}</p>
-                  </div>
-                  <div className="text-left sm:text-right">
-                    <span className="inline-block text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                      ✓ Concluído
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 4. Histórico de CANCELADOS */}
-          <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4 opacity-80">
-            <h2 className="text-lg font-bold text-gray-600 border-b border-gray-200 pb-2">
-              Histórico de Cancelamentos
-            </h2>
-            {agendamentosCancelados.length === 0 ? (
-              <p className="text-sm text-gray-400">Nenhum registro recente.</p>
-            ) : (
-              agendamentosCancelados.map(ag => (
-                <div key={ag.id} className="border-b border-gray-200 pb-2 last:border-0">
-                  <p className="line-through text-gray-500 text-sm">
-                    <strong>{ag.servicos?.nome}</strong> - {formatarDataHora(ag.data_hora_inicio)}
-                  </p>
-                  <p className="text-xs text-red-500 mt-1">
-                    Motivo: {ag.cancelamento_motivo || 'Cancelado pelo cliente'}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-
-        </div>
-      )}
-
     </div>
   );
 }
